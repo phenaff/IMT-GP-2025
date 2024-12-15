@@ -1,0 +1,14 @@
+.PHONY: all
+
+all:
+	@for dir in $(shell find . -type d -name "Module-*"); do \
+		echo "Visiting $$dir"; \
+		find "$$dir" -name "*.Rmd"; \
+		for file in $(shell find "$$dir" -name "*.Rmd"); do \
+			echo "Checking $$file"; \
+			if [ ! -f "${file%.Rmd}.pdf" ] || [ $(< "${file}") -gt $(< "${file%.Rmd}.pdf") ]; then \
+				echo "Rendering: $$file"; \
+				Rscript -e "renv::run(rmarkdown::render('$$file'))"; \
+			fi; \
+		done; \
+	done

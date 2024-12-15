@@ -127,7 +127,7 @@ price ($S$):
 $$\sigma(S, T) = \sigma_0 (1+a(S-100)) + bT
 (\#eq:bs-vol-in-tree)$$
 
-```{r, label=Black-Scholes-Vol-Function, echo=T}
+```{r Black-Scholes-Vol-Function, echo=T}
   sigma <- .3
   a <- -.2/100
   b <- 0
@@ -143,7 +143,7 @@ This determines the geometry of the tree.
 In this example, we construct a 3-periods tree, anual volatility is
 $30\%$. For simplicity, interest rate and dividend yield is set to 0.
 
-```{r, label=ImpliedTree-2, echo=T}
+```{r ImpliedTree-2, echo=T}
   ## all rates = 0
   r <- 0
   b <- 0
@@ -235,7 +235,7 @@ for each node:
 and this volatility is used to compute the call and put prices expiring
 at each time step and strike level:
 
-```{r, }
+```{r}
   ## matrice des prix call/put
   Call <- matrix(data=NA, nrow=nr, ncol=nc)
   Put <- matrix(data=NA, nrow=nr, ncol=nc)
@@ -252,7 +252,7 @@ Next, we use equations \@ref(eq:trinomial-pi) and \@ref(eq:trinomial-qi)
 to compute the transition probabilities at each node. The probability
 $p_i$ is computed by:
 
-```{r, }
+```{r}
   p <- function(i, j) {
     # S'_{i+1} and S'_{i+2}
     SP1 <- S[i+1, j+1]
@@ -272,7 +272,7 @@ $p_i$ is computed by:
 
 and the probability $q_i$ is determined by:
 
-```{r, }
+```{r}
   q <- function(i, j) {
     # S'_{i+2}, S'_{i+1} and S'_{i}
     SP2 <- S[i, j+1]
@@ -290,7 +290,7 @@ to time step $i-1$ in order to compute the transition probabilities at
 time step $i$. The transition probabilites for the root node are
 computed immediately:
 
-```{r, }
+```{r}
   Lambda <- matrix(data=NA, nrow=7, ncol=4)
   Lambda[1,1] <- 1
   Pu <- p(1,1)
@@ -301,7 +301,7 @@ computed immediately:
 and this provides the data for computing the state prices
 $\lambda_{i,2}, i=1, \ldots, 3$ for time step $\Delta t$.
 
-```{r, }
+```{r}
   Lambda[1,2] <- Pu * exp(-r*dt)
   Lambda[2,2] <- Pm * exp(-r*dt)
   Lambda[3,2] <- Pd * exp(-r*dt)
@@ -309,7 +309,7 @@ $\lambda_{i,2}, i=1, \ldots, 3$ for time step $\Delta t$.
 
 The state prices for the other time steps are computed similarly.
 
-```{r, }
+```{r}
   Lambda[1,3] <- p(1,2)*Lambda[1,2]
   Lambda[2,3] <- (1-p(1,2)-q(1,2))*Lambda[1,2] + p(2,2)*Lambda[2,2]
   Lambda[3,3] <- q(1,2)*Lambda[1,2] + (1-p(2,2)-q(2,2))*Lambda[2,2] + p(3,2)*Lambda[3,2]
@@ -328,7 +328,7 @@ The state prices for the other time steps are computed similarly.
 Since interest rate is 0, the state prices at each time step should sum
 up to 1. This is verified by:
 
-```{r, }
+```{r}
   z <- apply(Lambda, 2, function(x){sum(x[!is.na(x)])})
   print(z)
 ```
@@ -338,7 +338,7 @@ probabilites in grids, in order to facilitate the display. The up and
 down probabilities associated with each node are displayed in
 Figure \@ref(fig:Derman-Kani-3).
 
-```{r, }
+```{r}
   Pup <- matrix(data=NA, nrow=nr, ncol=nc)
   Pdn <- matrix(data=NA, nrow=nr, ncol=nc)
   Pmd <- matrix(data=NA, nrow=nr, ncol=nc)
@@ -364,7 +364,7 @@ Figure \@ref(fig:Derman-Kani-3).
 Finally, the local volatility at each node can be computed from the
 transition probabilities:
 
-```{r, }
+```{r}
   lvol <- function(i,j) {
     SP2 <- S[i, j+1]
     SP1 <- S[i+1, j+1]

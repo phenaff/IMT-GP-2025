@@ -52,6 +52,9 @@ vignettes/*.pdf
 # pkgdown site
 docs/
 
+# renv library
+renv/
+
 # translation temp files
 po/*~
 

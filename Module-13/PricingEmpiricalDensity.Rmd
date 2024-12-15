@@ -64,7 +64,7 @@ difference reflects the cost of transporting gas from East to West, say
 less than a douzen cents per unit of volume. Once in a while, however, a
 disruption in supply causes the price differential to jump to \$3 or \$5. In that context, what is the price of a call option struck at \$2?
 
-```{r, socal-basis, echo=FALSE,fig.align='center', fig.cap="Distribution of So-Cal basis (USD per mmbtu)", out.width="50%"} 
+```{r socal-basis, echo=FALSE,fig.align='center', fig.cap="Distribution of So-Cal basis (USD per mmbtu)", out.width="50%"} 
 knitr::include_graphics("../Graphics/lotteryTicket.pdf")
 ```
 
