@@ -53,7 +53,7 @@ vignettes/*.pdf
 docs/
 
 # renv library
-renv/
+renv/*
 
 # translation temp files
 po/*~
