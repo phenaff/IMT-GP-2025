@@ -1934,18 +1934,6 @@
       ],
       "Hash": "aa915611d73f13957f63f46afff797eb"
     },
-    "packrat": {
-      "Package": "packrat",
-      "Version": "0.9.2",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Requirements": [
-        "R",
-        "tools",
-        "utils"
-      ],
-      "Hash": "55ddd2d4a1959535f18393478b0c14a6"
-    },
     "padr": {
       "Package": "padr",
       "Version": "0.6.3",
