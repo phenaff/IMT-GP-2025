@@ -101,7 +101,7 @@ In total, we have 8 possible scenarios, labeled $S-1$ to $S-8$ for the 3 time pe
 
 Given this information, what should the optimal investment policy be like?
 
-We first consider a formulation named the *extensive form* of the stochastic problem, because it considers explicitely all possible scenarios that may unfold in the future periods.
+We first consider a formulation named the *extensive form* of the stochastic problem, because it considers explicitly all possible scenarios that may unfold in the future periods.
 
 # The stochastic problem in extensive form{#3-stage-pb}
 
@@ -146,7 +146,7 @@ $$
 
 The LP problem involves 30 variables, 15 accounting identities constraints and 30 non-negative constraints on all the variables.
 
-```{r}
+```{r lp-1}
 Amat <- matrix(0, nrow=15, ncol=30)
 
 sce_up = c(1.25, 1.14)
@@ -204,7 +204,7 @@ kable_styling(latex_options="hold_position")
 
 The excess or shortfall at horizon $T$ for each scenario is displayed in Table \@ref(tab:es).
 
-```{r es, echo=FALSE}
+```{r lp-2, echo=FALSE}
 wealth <- matrix(0, nrow=8, ncol=3)
 colnames(wealth) <- c("Scenario", "Shortfall", "Excess")
 for(i in seq(8)) {
@@ -219,7 +219,7 @@ booktabs = T, digits=0)
 
 In order to appreciate the contribution of the stochastic model, we may consider a deterministic model where the decision is based on the expected return. Since the expected return of the stock (1.155) is higher than the expected return of the bond (1.13), the entire budget will be allocated to the stock. Table \@ref(tab:ev) shows the outcome of the strategy for the 8 scenarios, compared to the result of the stochastic optimization.
 
-```{r, echo=FALSE}
+```{r lp-3, echo=FALSE}
 return.index <- permutations(2,3,c(0,1), repeats.allowed = T)
 return.high <- 1.25
 return.low <- 1.06
@@ -229,7 +229,7 @@ return.by.scenario <- return.high ^ (3-idx) * return.low ^ idx
 wealth.by.scenario <- W.0 * return.by.scenario
 ```
 
-```{r ev, echo=FALSE}
+```{r lp-4, echo=FALSE}
 options(knitr.kable.NA = "")
 df = data.frame(Scenarios=seq(8),
 W1.Short=-pmin(wealth.by.scenario-G, 0),
@@ -247,7 +247,7 @@ caption="Expected Value vs. Recourse solutions of the asset allocation problem."
 
 The objective value may be interpreted as the expected annual cost of funding the shortfall.
 
-```{r}
+```{r lp-5}
 expected.cost.ev = mean( -df$W1.Short*r_short + df$W1.Long*r_long)
 expected.cost.sp = mean( -df$W2.Short*r_short + df$W2.Long*r_long)
 VSS = expected.cost.sp - expected.cost.ev
@@ -461,7 +461,7 @@ $$
 
 The problem is readily solved to yield the optimal allocation in assets $A$ and $B$. Note however that the matrix in the quadratic term is not positive definite: the quadratic term only involves variables $y_1$ and $y_2$, while the problem has 4 variables in total. As a result, the solver must chosen with care.
 
-```{r}
+```{r prog-hedging-1}
 P <- matrix(0, nrow=4, ncol=4)
 P[3,3] = 1
 P[4,4] = 1
@@ -508,7 +508,7 @@ $$
 
  which are solved below. This first subproblem is
 
-```{r}
+```{r prog-hedging-2}
 P <- diag(3)
 c <- c(-5, -5, 0)
 G <- matrix(c(1, 1,  0,
@@ -522,7 +522,7 @@ and $x_{1B}^1 = `r round(sol.1$x[2],2)`$
 
  The second subproblem is solved similarly:
 
-```{r}
+```{r prog-hedging-3}
 P <- diag(3)
 c <- c(-5, -5, 0)
 G <- matrix(c(1, 1,  0,
@@ -545,7 +545,7 @@ $$
 
 The multiplier $\lambda$ associated with each subproblem are finally updated, and the next iteration can now be computed.
 
-```{r}
+```{r prog-hedging-4}
 x.hat = c(mean(sol.1$x[1], sol.2$x[1]),
 mean(sol.1$x[2], sol.2$x[2]))
 w.1 = 0
@@ -569,7 +569,7 @@ $$
 $$
 
 
-```{r}
+```{r prog-hedging-5}
 sub.prob <- function(x.hat, r, w, q) {
 P <- zeros(3,3)
 P[1,1] <- r
@@ -586,7 +586,7 @@ sol
 ```
 For verification, we reproduce the calculation of the first iteration for subproblem 1:
 
-```{r}
+```{r prog-hedging-6}
 x.hat <- c(5,5)
 r <- 2
 w <- c(0,0)
@@ -598,7 +598,7 @@ print(paste("x_A:", round(sol$x[1],2),
 The algorithm is initialized by solving each subproblem with
 perfect foresight:
 
-```{r}
+```{r prog-hedging-7}
 q = matrix(c(1,3,4,2), nrow=2, byrow=TRUE)
 w = matrix(0, nrow=2, ncol=2)
 x.hat <- c(0,0)
@@ -636,7 +636,7 @@ conver <- (test.1 <= tol) & (test.2 <= tol)
 ```
 
 The progress of the algorithm is illustrated by the following graph.
-```{r, PHA-plot, echo=FALSE, fig.cap="Progressive Hedging Iterations", fig.align='left'}
+```{r prog-hedging-plot, echo=FALSE, fig.cap="Progressive Hedging Iterations", fig.align='left'}
 plot(seq(iter.count),x.iter[1:iter.count,1], ylim=c(2, 8), type="l", col="blue", xlab="Iterations",
      ylab=expression(X))
 lines(seq(iter.count), x.iter[1:iter.count,2], type="l", col="red")
@@ -645,6 +645,7 @@ abline(h=7.5)
 ```
 
 
+<!--
 ## Second example: A 3-stage optimization problem
 
 The progressive hedging algorithm is particularly valuable when considering numerous stages, which translates into many scenarios. At each iteration, the corresponding subproblems may be solved in parallel. This of course is only beneficial when the subproblem is sufficiently time consuming. Nevertheless, as a proof of principle, we next revisit the 3 stage asset allocation problem of section \@ref(3-stage-pb), with a parallel solution of the sub problems.
@@ -667,7 +668,7 @@ with $x_k = (x_{kA}^1, x_{kB}^1,
     x_{kA}^2 , x_{kB}^2,
     x_{kA}^3 , x_{kB}^3)$
 
-```{r}
+```{r prog-hedging2-1, eval=FALSE}
 nb.vars = 8
 A <- matrix(0, nrow=4, ncol=nb.vars)
 rownames(A) = c("t_0", "t_1", "t_2", "t_3")
@@ -693,6 +694,12 @@ for(i in seq(nb.x)) {
 }
 c = c(w - r * x.hat, r_short, -r_long)
 x_lb = rep(0, nb.vars)
+
+# min (1/2) x^T P x + c^T x
+# such that
+# A x = b
+# G x <= h
+
 piqp::solve_piqp(P=Q, c=c, A=A, b=b, x_lb=x_lb)
 }
 ```
@@ -700,7 +707,7 @@ piqp::solve_piqp(P=Q, c=c, A=A, b=b, x_lb=x_lb)
 As a verification, we solve the first scenario with perfect foresight. As expected,the optimal decision is to invest the initial budget in asset A, which has higher
 return than asset B in all three stages.
 
-```{r}
+```{r prog-hedging2-2, eval=FALSE}
 sce = rbind(sce_up, sce_up, sce_up)
 nb.x = 6
 nb.vars = 8
@@ -721,7 +728,7 @@ With 3 stages, the non-anticipative constraint is a bit more complex:
 
 The following function implements the calculation of $\hat{x}$ for all stages and bundles of scenarios.
 
-```{r}
+```{r prog-hedging2-3, eval=FALSE}
 scen = rbind(sce_up, sce_down)
 m.scen = as.matrix(expand.grid(stage.2=c(1,2), stage.1=c(1,2), stage.0=c(1,2)))
 m.scen = m.scen[,c(3,2,1)]
@@ -768,7 +775,7 @@ x.hat
 
 One of the advantages of the progressive hedging algorithm is to enable a distributed computation of the algorithm, since all the subproblems may be solved in parallel. We take advantage of this feature in the following code:
 
-```{r}
+```{r prog-hedging2-4, eval=FALSE}
 # Detect the number of available cores
 nb.available.cores <- parallel::detectCores()
 nb.cores <- 8
@@ -779,7 +786,7 @@ cluster <- parallel::makeCluster(nb.cores, type="PSOCK")
 doParallel::registerDoParallel(cl=cluster)
 ```
 
-```{r}
+```{r prog-hedging2-5, eval=FALSE}
 # Initialize with perfect foresight
 w = matrix(0, nrow=8, ncol=6)
 r = 0
@@ -787,7 +794,7 @@ x.hat = matrix(0, nrow=8, ncol=6)
 
 run.subproblems <- function(foo, scen, m.scen, r,w,x.hat, r_short, r_long, b) {
 
-all_sol <- foreach(i = seq(nrow(m.scen))) %dopar% {
+all_sol <- foreach(i = seq(nrow(m.scen))) %do% {
   sce = scen[m.scen[i,],]
   foo(sce, r, w[i,], x.hat[i,], r_short, r_long, b)
 }
@@ -804,11 +811,12 @@ iter.max <- 2000
 r = .00002
 x.iter = matrix(0, nrow=iter.max, ncol=4)
 while(!conver & (iter.count < iter.max)) {
+  print(iter.count)
+  if(iter.count >= 13) browser()
 iter.count <- iter.count + 1
 x.iter[iter.count,] = x.hat[1,1:4]
 
 all_sol = run.subproblems(pha.sub, scen, m.scen, r, w, x.hat, r_short, r_long, b)
-
 x.hat.old <- x.hat
 x.hat <- calc.x.hat()
 w.old <- w
@@ -826,7 +834,7 @@ conver <- (test.1 <= tol) & (test.2 <= tol)
 
 The progress of the algorithm is illustrated by the following graph, which shows a linear convergence towards the solution. Strategies for speeding up the convergence is a topic of active research.
 
-```{r, PHA-plot-1, echo=FALSE, fig.cap="Progressive Hedging Iterations for the 3-stages asset allocation problem, showing the convergence of the first 4 variables.", fig.align='left'}
+```{r PHA-plot-1, eval=FALSE, echo=FALSE, fig.cap="Progressive Hedging Iterations for the 3-stages asset allocation problem, showing the convergence of the first 4 variables.", fig.align='left'}
 alpha <- 1:4
 plot(seq(iter.count),x.iter[1:iter.count,1], ylim=c(0, 70000), type="l", col=alpha[1], xlab="Iterations",
      ylab=expression(X))
@@ -837,3 +845,4 @@ legend("topleft", legend=TeX(sprintf(r'($x_%d$)', alpha)),
 lwd=1,
 col=alpha)
 ```
+-->

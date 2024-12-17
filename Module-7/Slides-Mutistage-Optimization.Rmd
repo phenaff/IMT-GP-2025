@@ -330,7 +330,7 @@ abline(h=7.5)
 
 ## Second example: A 3-stage optimization problem
 
-```{r, echo=F}
+```{r, eval=FALSE, echo=F}
 nb.vars = 8
 A <- matrix(0, nrow=4, ncol=nb.vars)
 rownames(A) = c("t_0", "t_1", "t_2", "t_3")
@@ -361,7 +361,7 @@ piqp::solve_piqp(P=Q, c=c, A=A, b=b, x_lb=x_lb)
 ```
 
 
-```{r, echo=FALSE}
+```{r, eval=FALSE, echo=FALSE}
 sce = rbind(sce_up, sce_up, sce_up)
 nb.x = 6
 nb.vars = 8
@@ -418,7 +418,7 @@ x.hat
 ```
 
 
-```{r, echo=FALSE, cache=TRUE, warning=FALSE}
+```{r, eval=FALSE, echo=FALSE, cache=TRUE, warning=FALSE}
 # Detect the number of available cores
 nb.available.cores <- parallel::detectCores()
 nb.cores <- 8
@@ -429,7 +429,7 @@ cluster <- parallel::makeCluster(nb.cores, type="PSOCK")
 doParallel::registerDoParallel(cl=cluster)
 ```
 
-```{r}
+```{r eval=FALSE}
 # Initialize with perfect foresight
 w = matrix(0, nrow=8, ncol=6)
 r = 0
@@ -475,7 +475,7 @@ conver <- (test.1 <= tol) & (test.2 <= tol)
 ```
 
 
-```{r, PHA-plot-1, echo=FALSE, out.width="70%", fig.cap="Progressive Hedging Iterations for the 3-stages asset allocation problem, showing the convergence of the first 4 variables.", fig.align='left'}
+```{r PHA-plot-1, eval=FALSE, echo=FALSE, out.width="70%", fig.cap="Progressive Hedging Iterations for the 3-stages asset allocation problem, showing the convergence of the first 4 variables.", fig.align='left'}
 alpha <- 1:4
 plot(seq(iter.count),x.iter[1:iter.count,1], ylim=c(0, 70000), type="l", col=alpha[1], xlab="Iterations",
      ylab=expression(X))

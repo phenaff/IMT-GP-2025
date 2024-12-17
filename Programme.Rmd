@@ -69,7 +69,7 @@ Pour le reste, un manuel incontournable est "Finance de Marché" de R. Portait e
 
 # Organisation pratique
 
-Cette année, avec 30 heures de cours, nous avons le temps de couvrir 12 modules sur les 18 proposés. On décidera du programme lors du premier cours.
+Cette année, avec 30 heures de cours, nous avons le temps de couvrir 12 modules sur les 18 proposés. Les deux premiers jours seront consacrés à la gestion de portefeuille, et on décidera du reste du programme lors du premier cours.
 Le principe général du cours est celui de la "classe inversée". Chaque module de 2h30 s'articule selon le même schéma:
 
 - avant le cours, chacun étudie les documents mis à disposition (articles, chapitre du manuel)
@@ -146,24 +146,20 @@ File -> New Project -> Existing Directory. Dans la console R, vous devriez voir 
 ... One or more packages recorded in the lockfile are not installed
 ````
 
-- Chargez les "packages" manquants de GitHub et CRAN/R-Forge avec
+- Chargez les "packages" manquants de GitHub, CRAN et R-Forge avec
 
 ````markdown
-> renv.install("phenaff/R-package-empfin")
+> renv::restore()
 ````
 
-````markdown
-> renv::install()
-````
-
-- L'installation de tous les "packages" peut prendre un temps certain!
+- L'installation de tous les "packages" peut prendre un temps certain (> 200 packages)! Quelques packages sont installés à partir du code source, et il faut donc aussi installer toute une série de librairies de développement (BLAS, LAPACK, GSL, etc.)
 
 - Utiliser renv::install() pour ajouter des "packages" supplémentaires, puis mettre à jour la liste des packages (renv.lock) avec:
 
 ````markdown
 > renv::snapshot()
 ````
-
+Voir la [documentation](https://rstudio.github.io/renv/articles/renv.html) pour plus de détails.
 
 
 ## Verification
@@ -175,7 +171,7 @@ Vous pouvez même recréer l'ensemble du projet avec
 
 ```{bash, eval=FALSE}
 make clean
-make pdf
+make render
 ```
 -->
 
@@ -214,7 +210,7 @@ and Other Derivatives):
 Avant chaque module, il est indispensable d'étudier les documents fournis.
 }
 
-## Module 1 (14/2): Séries chronologiques financières [@Cont2001]
+## Module 1 (11/2): Séries chronologiques financières [@Cont2001]
 
 Dans cette séance introductive, on passera en revue les "faits stylisés" caractéristiques des séries chronologiques financières, et les méthodes de calcul de
 la covariance entre les actifs financiers.
@@ -230,7 +226,7 @@ Documents:
 - slides-1.pdf
 
 
-## Module 2 (14/2): La théorie classique [@Markowitz1952], modèle de Treynor-Black. Distinction "gestion active/gestion passive" [@Treynor1973].
+## Module 2 (11/2): La théorie classique [@Markowitz1952], modèle de Treynor-Black. Distinction "gestion active/gestion passive" [@Treynor1973].
 
 On considère ici le travail d'Harry Markowitz, qui établit les fondements de la gestion quantitative. Ce modèle reste  important car il a défini le vocabulaire et les concepts de base qui sont toujours d'actualité.
 
@@ -253,7 +249,7 @@ Documents:
 - Notes-MEDAF.pdf
 
 
-## Module 3 (20/2): Modèle de Black-Litterman. [@He2005]
+## Module 3 (12/2): Modèle de Black-Litterman. [@He2005]
 
 Le modèle de Black-Litterman et ses nombreuses extensions est très prisé des gestionnaires du fait de sa flexibilité. Il permet également de limiter les risques de modélisation.
 
@@ -267,7 +263,7 @@ Documents:
 - Notes-BL.pdf
 
 
-## Module 4 (20/2): Approche factorielle [@Fama1992; @Fama1993]
+## Module 4 (12/2): Approche factorielle [@Fama1992; @Fama1993]
 
 - Définition et identification des facteurs
 - Estimation et limites statistiques
@@ -284,7 +280,7 @@ Documents:
 - Notes-APT.pdf
 
 
-## Module 5 (21/2): Risque de modélisation [@Harvey2016a,@Boyle2012, @Ste1997]
+## Module 5: Risque de modélisation [@Harvey2016a,@Boyle2012, @Ste1997]
 
 Identification du "risque de modélisation" dans le cadre du modèle moyenne/variance, et en particulier du risque
 lié à l'utilisation de la matrice de covariance.
@@ -295,7 +291,7 @@ Documents:
 - slides-ModelRisk.pdf
 
 
-## Module 6 (21/2): Méthodes récentes de gestion de portefeuille, "risk budgeting" [@Bruder2012]
+## Module 6: Méthodes récentes de gestion de portefeuille, "risk budgeting" [@Bruder2012]
 
 
 - Modèle 1/N
@@ -311,7 +307,7 @@ Documents:
 - slides-RB.pdf
 
 
-## Module 7 (5/3): Optimisation multi-période par programmation stochastique.
+## Module 7: Optimisation multi-période par programmation stochastique.
 
 - Formulation du problème multi-périodes
 - algorithme "Progressive Hedging"
@@ -319,7 +315,7 @@ Documents:
 TP-Portefeuille (à rendre pour le `r as.Date("2024-03-05")+15`):
 
 
-## Module 8 (5/3): Rappel sur les instruments de taux
+## Module 8: Rappel sur les instruments de taux
 
 - Courbe des taux actuarielle et zéro-coupon
 - Valorisation d'une obligation et d'un swap
@@ -331,7 +327,7 @@ Documents à lire avant le cours:
 - Chapitres 4-5 [@Henaff2012].
 - Faire les exercices \texttt{exo-RateYield} pour vérifier votre maîtrise des calculs actuariels de base.
 
-## Modules 9 (6/3): Gestion de portefeuille obligataire (Immunisation et dédication).
+## Modules 9: Gestion de portefeuille obligataire (Immunisation et dédication).
 
 Survol du problème de gestion obligataire et des approches classiques: couverture en sensibilité et adossement des flux.
 
@@ -346,11 +342,11 @@ Documents:
 
 Construction d'un portefeuille obligataire par programmation linéaire.
 
-## Modules 10 (6/3): Gestion de portefeuille obligataire (Immunisation et dédication).
+## Modules 10: Gestion de portefeuille obligataire (Immunisation et dédication).
 
 Construction d'un portefeuille obligataire par programmation linéaire.
 
-## Module 11 (12/3):
+## Module 11: Le "smile" de volatilité
 
 On suppose que le modèle binomial de Cox-Ross-Rubinstein et le modèle de Black-Scholes sont acquis. On s'intéresse ici à divers aménagements du modèle de base pour mieux prendre en compte les conditions de marché.
 
@@ -363,7 +359,7 @@ Documents à lire avant le cours:
 - Chapitre 13-14 [@Henaff2012]
 
 
-## Modules 12 (12/3):
+## Modules 12: Gérer les risques du second ordre dans le cadre Black-Scholes: La méthode "Vanna-Volga".
 
 - Couverture dynamique dans le cadre Black-Scholes et ses limites
 - Pricing Vanna-Volga [@Ag2008]
@@ -374,7 +370,7 @@ Documents à lire avant le cours:
 
 
 
-## Modules 13 (13/3):
+## Modules 13: Volatilité locale et distribution empirique.
 
 Modèles empiriques
 
@@ -391,26 +387,18 @@ Documents à lire avant le cours:
 
 TP-Options (à rendre pour le `r as.Date("2024-03-13")+15`): méthode Vanna-Volga pour le pricing et l'interpolation d'une courbe de volatilité.
 
-## Module 14 (13/3):
-
-Modélisation de la courbe de taux (modèle à un facteur)
+## Module 14: Modélisation de la courbe de taux (modèle à un facteur).
 
 Les modèles de diffusion des taux sont indispensables pour valoriser les produits dérivés obligataires et pour simuler l'évolution de la courbe des taux.
 
 - ajustement paramétrique d'une courbe de taux []
 - le modèle à un facteur Black-Derman-Toy [@Boyle2000]
 
-## Modules 15 (19/3):
+## Modules 15: Valorisation de produits dérivés de taux.
 
-Modélisation de la courbe des taux (modèle à un facteur)
+Valorisation d'un option sur obligation avec le modèle de Black-Derman-Toy, optimisation des calculs.
 
-- Valorisation de produits dérivés de taux.
-
-TP-Taux (à rendre pour le `r as.Date("2024-03-19")+15`): valorisation d'un option sur obligation avec le modèle de Black-Derman-Toy, optimisation des calculs.
-
-## Modules 16 (19/3):
-
-Méthodes de Monte-Carlo
+## Modules 16: Méthodes de Monte-Carlo.
 
 La génération de scénarios "risque-neutres" est un pilier des méthodes
 de mesure du risque. Les méthodes de simulation sont de plus extrèmement
@@ -421,18 +409,13 @@ complexes.
 - Méthodes de réduction de variance: scénarios antithétiques, variables de contrôle
 - Valorisation d'un fond à formule par simulation.
 
-## Module 17 (26/3)
-
-Méthode de Monte-Carlo:
+## Module 17: Valorisation d'une option Américaine par simulation.
 
 - Equation de Bellman et valorisation d'une option Américaine
 - Méthode de Longstaff-Schwartz
 
-TP-Simulation (à rendre pour le `r as.Date("2024-03-26")+15`): valorisation d'un produit structuré.
 
-## Module 18 (26/3)
-
-Méthode de Monte-Carlo: application à la valorisation d'actifs industriels.
+## Module 18: Méthode de Monte-Carlo: application à la valorisation d'actifs industriels.
 
 - Optimisation du fonctionnement d'une usine électrique
 - Valorisation d'un réservoir de gas naturel
