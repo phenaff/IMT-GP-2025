@@ -338,12 +338,12 @@ For the time being, we will take $\rho$ as fixed. The complete algorithm is ther
 \BlankLine
 $k <- 0; \lambda_k <- 0$\;
 \While{$k<k_{\mbox{max}}$ and $t > tol$}{
-    $x_{k+1} <-  \underset{x}{\mathrm{argmin}} \phi_k(x)$\;
-    $\lambda_{k+1} <- \lambda_k - \rho g(x_{k+1})$\;
-    $k <- k+1$\;
-    $t_1  <- ||\lambda_{k+1} - \lambda_k||$\;
-    $t_2 <- ||g(x_{k+1}||$\;
-    $t <- t_1 \mbox{and} t_2$\;
+    $x_{k+1} \leftarrow  \underset{x}{\mathrm{argmin}} \phi_k(x)$\;
+    $\lambda_{k+1} \leftarrow \lambda_k - \rho g(x_{k+1})$\;
+    $k \leftarrow k+1$\;
+    $t_1  \leftarrow ||\lambda_{k+1} - \lambda_k||$\;
+    $t_2 \leftarrow ||g(x_{k+1}||$\;
+    $t \leftarrow t_1 \mbox{and} t_2$\;
     }
 \caption{Augmented Lagrangian algorithm}
 \end{algorithm}
@@ -368,7 +368,7 @@ Q(x,w) = & \mbox{min}_y \ \ \ f^2(x, y(w), w) \\
 \end{aligned}
 $$
 
-The uncertainty regarding the second stage is modelled by $K$ scenarios, so that the problem may be written:
+The uncertainty regarding the second stage is modeled by $K$ scenarios, so that the problem may be written:
 
 $$
 \begin{aligned}
@@ -382,9 +382,9 @@ or,
 
 $$
 \begin{aligned}
-    \mbox{min} & \sum_{k=1}^K \pi_k (f^1(x_k) + f^2(x, y_k)) \\
+    \mbox{min} & \sum_{k=1}^K \pi_k (f^1(x_k) + f^2(x_k, y_k)) \\
     \mbox{s.t.} & \ \ \ g^1(x) = 0 \\
-    & \ \ \ g^2(x, y_k) = 0 \ \ \ \forall k \\
+    & \ \ \ g^2(x_k, y_k) = 0 \ \ \ \forall k \\
     & \ \ \ x_k - \hat{x} = 0 \ \ \ \forall k
 \end{aligned}
 $$
@@ -393,16 +393,16 @@ Let's now use the augmented lagrangian formulation to move the constraints $x_k 
 
 $$
 \begin{aligned}
-    \mbox{min} & \sum_{k=1}^K \pi_k \left( f^1(x_k) + f^2(x, y_k)) + \lambda_k^T(x_k-\hat{x}) + \frac{1}{2} \rho ||x_k - \hat{x}||\right) \\
-    \mbox{s.t.} & \ \ \ g^1(x) = 0 \\
-    & \ \ \ g^2(x, y_k) = 0 \ \ \ \forall k \\
+    \mbox{min} & \sum_{k=1}^K \pi_k \left( f^1(x_k) + f^2(x_k, y_k)) + \lambda_k^T(x_k-\hat{x}) + \frac{1}{2} \rho ||x_k - \hat{x}||\right) \\
+    \mbox{s.t.} & \ \ \ g^1(x_k) = 0 \\
+    & \ \ \ g^2(x_k, y_k) = 0 \ \ \ \forall k \\
 \end{aligned}
 $$
-and the problem can be split into $K$ subproblems of the form
+and the problem can be split into $K$ sub problems of the form
 
 \begin{equation}
 \begin{aligned}
-    \mbox{min} &  f^1(x_k) + f^2(x, y_k)) + \lambda_k^T(x_k-\hat{x}) + \frac{1}{2} \rho ||x_k - \hat{x}|| \\
+    \mbox{min} &  f^1(x_k) + f^2(x_k, y_k)) + \lambda_k^T(x_k-\hat{x}) + \frac{1}{2} \rho ||x_k - \hat{x}|| \\
     \mbox{s.t.} & \ \ \ g^1(x_k) = 0 \\
     & \ \ \ g^2(x_k, y_k) = 0
 \end{aligned}
@@ -419,15 +419,16 @@ The progressive hedging algorithm is almost identical to the original augmented 
 \Output{$x^*$}
 \BlankLine
 $i <- 0; \lambda_i <- 0; \mbox{converged} <- False$\;
-\While{$k<k_{\mbox{max}}$ and $! \mbox{converged}$}{
-    Solve the $K$ subproblems \ref{eq:subproblems} to obtain $x^{i+1}_k, k = 1, \ldots, K$\;
+\While{$i<i_{\mbox{max}}$ and $! \mbox{converged}$}{
+    Solve the $K$ sub problems \ref{eq:subproblems} to obtain $x^{i+1}_k, k = 1, \ldots, K$\;
     Compute  $\hat{x}^{i+1} = \sum_{k=1}^K \pi_k x^{i+1}_k$\;
     Update the multipliers: $\lambda^{i+1}_k = \lambda^i_k + \rho(x^{i+1}_k - \hat{x}^{i+1})$\;
-    $i <- i+1$\;
-    $t_1  <- ||\lambda^{i+1} - \lambda^i|| < \mbox{tol}_1$\;
-    $t_2 <- ||g^1(x^{i+1}|| < \mbox{tol} < \mbox{tol}_2$\;
-    $t_3 <- ||g^2(x^{i+1}|| < \mbox{tol} < \mbox{tol}_3$\;
-    $\mbox{converged} <- t_1 \ \  \mbox{and} t_2 \ \ \mbox{and} t_3$\;
+    $i \leftarrow i+1$\;
+    $t_1  = ||\lambda^{i+1} - \lambda^i|| < \mbox{tol}_1$\;
+    $t_2 = ||g^1(x^{i+1}|| < \mbox{tol} < \mbox{tol}_2$\;
+    $t_3 = ||g^2(x^{i+1}|| < \mbox{tol} < \mbox{tol}_3$\;
+    Convergence test:;
+    $\mbox{converged} = t_1 \ \  \mbox{and} \ \ t_2 \ \ \mbox{and} \ \ t_3$\;
     }
 \caption{Progressive Hedging algorithm}
 \end{algorithm}
@@ -459,7 +460,12 @@ $$
   \end{aligned}
 $$
 
-The problem is readily solved to yield the optimal allocation in assets $A$ and $B$. Note however that the matrix in the quadratic term is not positive definite: the quadratic term only involves variables $y_1$ and $y_2$, while the problem has 4 variables in total. As a result, the solver must chosen with care.
+The problem is readily solved to yield the optimal allocation in assets $A$ and $B$. Note however that the matrix in the quadratic term is not positive definite: the quadratic term only involves variables $y_1$ and $y_2$, while the problem has 4 variables in total. As a result, the solver must chosen with care. The PIQP solver handles problems of the form
+
+$$
+$$
+
+for real positive semi-definite matrices $P$. With variables arranged as $x_A, x_B, y_1, y_2$, the problem is set up as follows: 
 
 ```{r prog-hedging-1}
 P <- matrix(0, nrow=4, ncol=4)
@@ -471,7 +477,7 @@ G <- matrix(c(1, 1, 0, 0,
               -4, -2, 0, -1), nrow=3, byrow=TRUE)
 h <- c(10, -25, -25)
 x_lb <- rep(0, 4)
-sol <- solve_piqp(P=P, c=c, G=G, h=h, x_lb=x_lb )
+sol <- piqp::solve_piqp(P=P, c=c, G=G, h=h, x_lb=x_lb )
 ```
 
 The solution is $x_A$ = `r round(sol$x[1],2)`, $x_B$ = `r round(sol$x[2],2)`.
@@ -556,7 +562,7 @@ w.2 = w.2 + r * (sol.2$x[1:2] - x.hat)
 ```
 
 We provide below a program to perform the entire progressive hedging algorithm.
-First, we define a function that solves the generic subproblem, where $x_k = (x_{kA}, x_{kB})$ and $k=1,2$.
+First, we define a function that solves the generic sub problem, where $x_k = (x_{kA}, x_{kB})$ for $k=1,2$.
 
 $$
 \begin{aligned}
@@ -564,7 +570,7 @@ $$
     \mbox{s.t.} & \\
     & x_{kA} + x_{kB} <= 10  \\
     & q_{kA} x_{kA} + q_{kB} x_{kB} + y_k >= 25 \\
-    & x_{kA}, x_{kB}, y_k, >= 0
+    & x_{kA}, x_{kB}, y_k >= 0
   \end{aligned}
 $$
 
@@ -584,7 +590,7 @@ sol <- solve_piqp(P=P, c=c, G=G, h=h, x_lb = x_lb)
 sol
 }
 ```
-For verification, we reproduce the calculation of the first iteration for subproblem 1:
+For verification, we reproduce the calculation of the first iteration for sub problem 1:
 
 ```{r prog-hedging-6}
 x.hat <- c(5,5)
@@ -595,7 +601,7 @@ sol <- sub.prob(x.hat, r, w, q)
 print(paste("x_A:", round(sol$x[1],2),
 "x_B:", round(sol$x[2],2), sep=" "))
 ```
-The algorithm is initialized by solving each subproblem with
+The algorithm is initialized by solving each sub problem with
 perfect foresight:
 
 ```{r prog-hedging-7}
@@ -635,7 +641,8 @@ conver <- (test.1 <= tol) & (test.2 <= tol)
 }
 ```
 
-The progress of the algorithm is illustrated by the following graph.
+The progress of the algorithm is illustrated by the following graph, where the solution is seen to converge towards the extensive form solution $x_A=2.5, x_B=7.5$.
+
 ```{r prog-hedging-plot, echo=FALSE, fig.cap="Progressive Hedging Iterations", fig.align='left'}
 plot(seq(iter.count),x.iter[1:iter.count,1], ylim=c(2, 8), type="l", col="blue", xlab="Iterations",
      ylab=expression(X))
@@ -645,12 +652,12 @@ abline(h=7.5)
 ```
 
 
-<!--
+
 ## Second example: A 3-stage optimization problem
 
-The progressive hedging algorithm is particularly valuable when considering numerous stages, which translates into many scenarios. At each iteration, the corresponding subproblems may be solved in parallel. This of course is only beneficial when the subproblem is sufficiently time consuming. Nevertheless, as a proof of principle, we next revisit the 3 stage asset allocation problem of section \@ref(3-stage-pb), with a parallel solution of the sub problems.
+The progressive hedging algorithm is particularly valuable when considering numerous stages, which translates into many scenarios. At each iteration, the corresponding sub problems may be solved in parallel. This of course is only beneficial when the sub problem is sufficiently time consuming. Nevertheless, as a proof of principle, we next revisit the 3 stages asset allocation problem of section \@ref(3-stage-pb), with a parallel solution of the sub problems.
 
-Similarly to the previous example, The subproblem is
+Similarly to the previous example, The sub problem is
 
 $$
 \begin{aligned}
@@ -668,7 +675,24 @@ with $x_k = (x_{kA}^1, x_{kB}^1,
     x_{kA}^2 , x_{kB}^2,
     x_{kA}^3 , x_{kB}^3)$
 
-```{r prog-hedging2-1, eval=FALSE}
+or, in the form of a standard QP problem:
+
+$$
+\begin{aligned}
+    \mbox{min} \ \ & -v^-M_k +v^+P_k + w^T (x_k - \hat{x}_k) + \frac{r}{2} ||x_k - \hat{x}_k||^2 \\
+    \mbox{s.t.} & \\
+    & x_{kA}^1 + x_{kB}^1 = W_0  \\
+    & q_{kA}^1 x_{kA}^1 + q_{kB}^1 x_{kB}^1 - x_{kA}^2 - x_{kB}^2 = 0  \\
+    & q_{kA}^2 x_{kA}^2 + q_{kB}^2 x_{kB}^2 - x_{kA}^3 - x_{kB}^3 = 0  \\
+    & q_{kA}^3 x_{kA}^3 + q_{kB}^3 x_{kB}^3  + M_k -P_k = G  \\
+    & x_{kA}^{1,2,3}, x_{kB}^{1,2,3}, P_k, M_k >= 0
+  \end{aligned}
+$$
+
+with:
+
+
+```{r prog-hedging2-1}
 nb.vars = 8
 A <- matrix(0, nrow=4, ncol=nb.vars)
 rownames(A) = c("t_0", "t_1", "t_2", "t_3")
@@ -700,14 +724,14 @@ x_lb = rep(0, nb.vars)
 # A x = b
 # G x <= h
 
-piqp::solve_piqp(P=Q, c=c, A=A, b=b, x_lb=x_lb)
+piqp::solve_piqp(P=Q, c=c, A=A, b=b, x_lb=x_lb, settings=list(verbose=FALSE))
 }
 ```
 
 As a verification, we solve the first scenario with perfect foresight. As expected,the optimal decision is to invest the initial budget in asset A, which has higher
 return than asset B in all three stages.
 
-```{r prog-hedging2-2, eval=FALSE}
+```{r prog-hedging2-2}
 sce = rbind(sce_up, sce_up, sce_up)
 nb.x = 6
 nb.vars = 8
@@ -718,7 +742,7 @@ r = 0
 w = rep(0, nb.x)
 sol = pha.sub(sce, r, w, x.hat, r_short, r_long, b)
 ```
-The initial allocation is $(x_A, x_B) = (`r round(sol$x[1],2)`, `r round(sol$x[2],2)`$
+The initial allocation is $(x_A, x_B) = (`r round(sol$x[1],2)`, `r round(sol$x[2],2)`)$
 
 With 3 stages, the non-anticipative constraint is a bit more complex:
 
@@ -728,54 +752,44 @@ With 3 stages, the non-anticipative constraint is a bit more complex:
 
 The following function implements the calculation of $\hat{x}$ for all stages and bundles of scenarios.
 
-```{r prog-hedging2-3, eval=FALSE}
-scen = rbind(sce_up, sce_down)
-m.scen = as.matrix(expand.grid(stage.2=c(1,2), stage.1=c(1,2), stage.0=c(1,2)))
-m.scen = m.scen[,c(3,2,1)]
+Index of the average, for each scenario at stage $k$
 
-mean.x <- function(scen.list, i.var) {
-  # Compute the mean value of variable i.var over the bundle of scenarios
-  # scen.list
-  tmp = vector()
-  for(i in scen.list) {
-    tmp = c(tmp, all_sol[[i]]$x[i.var])
-  }
-  mean(tmp)
-}
+```{r}
+nb.scen = 8
+```
 
-calc.x.hat <- function() {
-x.hat = matrix(0, nrow=8, ncol=6)
-# stage 0
-s = seq(8)
-x.hat[s,1] = mean.x(s, 1)
-x.hat[s,2] = mean.x(s, 2)
-# stage 1
-s = seq(4)
-x.hat[s,3] = mean.x(s, 3)
-x.hat[s,4] = mean.x(s, 4)
-s = as.integer(c(5,6,7,8))
-x.hat[s,3] = mean.x(s, 3)
-x.hat[s,4] = mean.x(s, 4)
-# stage 2
-s = c(1,2)
-x.hat[s,5] = mean.x(s, 5)
-x.hat[s,6] = mean.x(s, 6)
-s = c(3,4)
-x.hat[s,5] = mean.x(s, 5)
-x.hat[s,6] = mean.x(s, 6)
-s = c(5,6)
-x.hat[s,5] = mean.x(s, 5)
-x.hat[s,6] = mean.x(s, 6)
-s = c(7,8)
-x.hat[s,5] = mean.x(s, 5)
-x.hat[s,6] = mean.x(s, 6)
-x.hat
+```{r x-hat-1}
+index.of.avg <- function(k) {
+  rep(seq(pow2(k-1)), each=nb.scen/pow2(k-1))
 }
 ```
 
+Calculation of $\hat{x}$ at stage $k$, given a vector of solution for the 8 scenarios.
+
+```{r x-hat-2}
+calc.x.hat <- function(x, k) {
+  idx <- index.of.avg(k)
+  number.of.avg = max(idx)
+  tmp <- vector(mode="numeric", length=number.of.avg)
+  for(i in seq_along(idx)) tmp[idx[i]] <- tmp[idx[i]] + x[i]
+  tmp <- tmp / (nb.scen/number.of.avg)
+  tmp[idx]
+}
+```
+
+Computation of a vector of sub-problem solutions for variable $i$
+
+```{r vector-of-solutions}
+vector.of.sol <- function(i) {
+  tmp = lapply(seq(nb.scen), function(k) all_sol[[k]]$x[i])
+  unlist(tmp)
+}
+```
+
+
 One of the advantages of the progressive hedging algorithm is to enable a distributed computation of the algorithm, since all the subproblems may be solved in parallel. We take advantage of this feature in the following code:
 
-```{r prog-hedging2-4, eval=FALSE}
+```{r prog-hedging2-4}
 # Detect the number of available cores
 nb.available.cores <- parallel::detectCores()
 nb.cores <- 8
@@ -786,24 +800,35 @@ cluster <- parallel::makeCluster(nb.cores, type="PSOCK")
 doParallel::registerDoParallel(cl=cluster)
 ```
 
-```{r prog-hedging2-5, eval=FALSE}
+```{r prog-hedging2-5}
 # Initialize with perfect foresight
-w = matrix(0, nrow=8, ncol=6)
+w = matrix(0, nrow=nb.scen, ncol=6)
 r = 0
-x.hat = matrix(0, nrow=8, ncol=6)
+x.hat = matrix(0, nrow=nb.scen, ncol=6)
 
-run.subproblems <- function(foo, scen, m.scen, r,w,x.hat, r_short, r_long, b) {
+# table of scenarios
+scen <- rbind(sce_up, sce_down)
+m.scen <- as.matrix(expand.grid(stage.2=c(1,2), stage.1=c(1,2), stage.0=c(1,2)))
+m.scen <- m.scen[, c(3,2,1)]
 
+run.subproblems <- function(scen, m.scen, r, w, x.hat, r_short, r_long, b) {
+
+# loop over scenarios
 all_sol <- foreach(i = seq(nrow(m.scen))) %do% {
   sce = scen[m.scen[i,],]
-  foo(sce, r, w[i,], x.hat[i,], r_short, r_long, b)
+  pha.sub(sce, r, w[i,], x.hat[i,], r_short, r_long, b)
 }
 all_sol
 }
 
-all_sol <- run.subproblems(pha.sub, scen, m.scen, r, w, x.hat,
-r_short, r_long, b)
-x.hat <- calc.x.hat()
+all_sol <- run.subproblems(scen, m.scen, r, w, x.hat, r_short, r_long, b)
+
+x.hat <- matrix(0, nrow=nb.scen, ncol=6)
+stage.nb <- rep(seq(3), each=2)
+for(j in seq(6)) {
+  x <- vector.of.sol(j)
+  x.hat[,j] <- calc.x.hat(x, stage.nb[j])  
+}
 
 conver <- FALSE
 iter.count <- 0
@@ -811,14 +836,20 @@ iter.max <- 2000
 r = .00002
 x.iter = matrix(0, nrow=iter.max, ncol=4)
 while(!conver & (iter.count < iter.max)) {
-  print(iter.count)
-  if(iter.count >= 13) browser()
 iter.count <- iter.count + 1
 x.iter[iter.count,] = x.hat[1,1:4]
 
-all_sol = run.subproblems(pha.sub, scen, m.scen, r, w, x.hat, r_short, r_long, b)
+all_sol = run.subproblems(scen, m.scen, r, w, x.hat, r_short, r_long, b)
 x.hat.old <- x.hat
-x.hat <- calc.x.hat()
+
+x.hat <- matrix(0, nrow=nb.scen, ncol=6)
+stage.nb <- rep(seq(3), each=2)
+
+for(j in seq(6)) {
+  x <- vector.of.sol(j)
+  x.hat[,j] <- calc.x.hat(x, stage.nb[j])  
+}
+
 w.old <- w
 for(i in seq(nrow(m.scen))) {
   w[i,] = w[i,] + r*(all_sol[[i]]$x[1:6]-x.hat[i,])
@@ -834,7 +865,7 @@ conver <- (test.1 <= tol) & (test.2 <= tol)
 
 The progress of the algorithm is illustrated by the following graph, which shows a linear convergence towards the solution. Strategies for speeding up the convergence is a topic of active research.
 
-```{r PHA-plot-1, eval=FALSE, echo=FALSE, fig.cap="Progressive Hedging Iterations for the 3-stages asset allocation problem, showing the convergence of the first 4 variables.", fig.align='left'}
+```{r PHA-plot-1, echo=FALSE, fig.cap="Progressive Hedging Iterations for the 3-stages asset allocation problem, showing the convergence of the first 4 variables.", fig.align='left'}
 alpha <- 1:4
 plot(seq(iter.count),x.iter[1:iter.count,1], ylim=c(0, 70000), type="l", col=alpha[1], xlab="Iterations",
      ylab=expression(X))
@@ -845,4 +876,3 @@ legend("topleft", legend=TeX(sprintf(r'($x_%d$)', alpha)),
 lwd=1,
 col=alpha)
 ```
--->
