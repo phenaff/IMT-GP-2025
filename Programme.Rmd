@@ -1,7 +1,7 @@
 ---
 output:
   pdf_document:
-    keep_tex: false
+    keep_tex: true
     fig_caption: yes
     latex_engine: pdflatex
 
@@ -280,7 +280,7 @@ Documents:
 - Notes-APT.pdf
 
 
-## Module 5: Risque de modélisation [@Harvey2016a,@Boyle2012, @Ste1997]
+## Module 5: Risque de modélisation [@Harvey2016a;@Boyle2012; @Ste1997]
 
 Identification du "risque de modélisation" dans le cadre du modèle moyenne/variance, et en particulier du risque
 lié à l'utilisation de la matrice de covariance.
