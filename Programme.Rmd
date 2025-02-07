@@ -1,7 +1,7 @@
 ---
 output:
   pdf_document:
-    keep_tex: true
+    keep_tex: false
     fig_caption: yes
     latex_engine: pdflatex
 
