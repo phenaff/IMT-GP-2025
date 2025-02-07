@@ -25,6 +25,7 @@ header-includes:
   - \usepgfplotslibrary{external}
   - \usepackage[ruled, vlined, linesnumbered]{algorithm2e}
   - \usepackage[utf8]{inputenc}
+  - \pgfplotsset{compat=1.18}
 ---
 
 ```{r folder-tools, include=TRUE, echo=FALSE}

@@ -25,6 +25,7 @@ header-includes:
   - \usepgfplotslibrary{external}
   - \usepackage[ruled, vlined, linesnumbered]{algorithm2e}
   - \usepackage[utf8]{inputenc}
+  - \pgfplotsset{compat=1.18}
 ---
 
 ```{r folder-tools, include=TRUE, echo=FALSE}
@@ -157,7 +158,7 @@ entropy $S(P,Q)$ between the historical density $P$ and $Q$ under the constraint
 expand upon this idea by computing $Q$ so that $Q$ satisfies an
 arbitrary number of additional constraints, in particular that 
 $Q$ prices exactly a number of benchmark derivatives.
-Next section describes a method for performing this calculation.
+Next section describes the method due to Zou and Derman for performing this calculation.
 
 ## Computation of the risk-neutral density
 
@@ -378,17 +379,17 @@ text(x=95, y=sigma*100+.1, "ATM volatility")
 
 The principle here is to use actual historical paths in a Monte-Carlo
 simulation. In this section, we summarize the model developed by
-Potters *et al* [@Marc2001].
+Potters *et al* [@Potters2001].
 
 ## The hedged Monte-Carlo algorithm
 
 Let’s first introduce some notation:
 
 $x_k$
-:   value of underlying asset at step $k$
+:   value of the underlying asset at step $k$,
 
 $C_k(x_k)$
-:   value of the derivative
+:   value of the derivative, at time step $k$, given the value $x_k$ of the underlying asset,
 
 $\phi_k(x_k)$
 :   hedge ratio for derivative $C_k$ 
@@ -467,6 +468,7 @@ $$
     - e^{-\rho} x_{k+1} + \delta \epsilon/2))^2
 $$
 
+<!--
 With contingent cash flows at each period, the constraints defined by
 equation \@ref(eq:non-neg) need to be reformulated. Consider first the
 constraint that the value of the contract must be greater or equal to
@@ -475,12 +477,13 @@ the equivalent constraint is that the contract value at a given time
 step and state must be greater than the sum of the expected discounted
 cash flows, under the conditional probability of this time step and
 state. The rest of the algorithm is left unchanged.
+-->
 
 ## Illustration
 
-To demonstrate the usefulness of this algorithm, we reproduce some results from [@Marc2001]. 
+To demonstrate the usefulness of this algorithm, we reproduce some results from [@Potters2001]. 
 The first experiment compares the Hedged MC algorithm to the classical binomial model for pricing European options, and to a unhedged Monte-Carlo pricing method. 
-The first step is togenerate geometric brownian paths:
+The first step is to generate geometric brownian paths:
 
 ```{r}
 GBMPathSimulator <-
@@ -605,7 +608,7 @@ df <- exp(-r*dT)
 ```
 
 We compare in Table \@ref(tab:euro) the exact Black-Scholes value of the option to the estimates obtained 
-by unhedged Monte-Carlo simulations and by hedged simulations.
+by unhedged and hedged Monte-Carlo simulations.
 
 ```{r, cache=TRUE}
 hedged.mc.price <- vector(mode="numeric", length=nb.trials)
@@ -623,7 +626,14 @@ opt <- CRRBinomialTreeOption(TypeFlag="ce", S=S.0, X=K.call, Time=TTM, r=r,
                              b=r, sigma=sigma, n=200)@price
 ```
 
-The results show a remarkable consistency between the Hedged MC method and the Black-Scholes value, with a standard deviation reduced by x% with respect to
+
+```{r, echo=FALSE}
+sd.u <- sd(unhedged.mc.price)
+sd.h <- sd(hedged.mc.price)
+reduc <- (1-sd.h/sd.u)*100
+```
+
+The results show a remarkable consistency between the Hedged MC method and the Black-Scholes value, with a standard deviation reduced by `r paste(round(reduc,1), "%")` with respect to
 the unhedged MC algorithm.
 
 ```{r euro, echo=FALSE}
