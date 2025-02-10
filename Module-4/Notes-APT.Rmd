@@ -223,19 +223,19 @@ r = \mu + Bf + \epsilon
 
 avec $\Cov(\epsilon) = \sigma^2 I, \E(\epsilon) = 0, \Cov(\epsilon, f) = 0$.
 
-On construit $(N-K)$ portefeuilles $v_i, i=1, \ldots, N-K$, orthogonaux entre eux et orthogonaux aux colonnes de $B$, et finalement le portefeuille $v$, moyenne des portefeuilles précédents:
+On construit $(N-K)$ portefeuilles $v_i, i=1, \ldots, N-K$, orthogonaux entre eux et orthogonaux aux colonnes de $B$. Soit $v_{i,j}$ le poid de l'actif $j$ dans le portefeuille $i$. Sans perte de généralité, on pose $\sum_j v_{i,j} = 1$. Finalement, définissons le portefeuille $v$, moyenne des portefeuilles précédents:
 
 \begin{align}
 v = \frac{1}{N-K} \sum_{i=1}^{N-K} v_i
 \end{align}
 
-Soit $a = \max |v_i|, i=1, \ldots, N-K$, calculons la variance du rendement de ce portefeuille moyen:
+Soit $a = \max |v_i|, i=1, \ldots, N-K$. Avec des portefeuilles suffisament diversifiés, $a$ est $O(1/N)$. Calculons la variance du rendement de ce portefeuille moyen:
 
 \begin{align}
-\Var{V^Tr} &= \Var(v^TBf + v^T \epsilon) \\
+\Var{v^Tr} &= \Var(v^TBf + v^T \epsilon) \\
 &= \frac{1}{(N-K)^2} Var((\sum_i v_i )^T \epsilon) \\
-&\leq \frac{1}{(N-K)^2} (N-K) a^2 \sigma^2 \\
-&\leq \frac{1}{(N-K)} a^2 \sigma^2
+&\leq \frac{1}{(N-K)^2} (N-K) N a^2 \sigma^2 \\
+&\leq \frac{1}{N(N-K)} \sigma^2
 \end{align}
 
 Pour $N >> K$, le portefeuille $v$ est essentiellement sans risque, et donc:
@@ -270,7 +270,7 @@ Ce résultat a inspiré de nombreuses stratégies de mise en oeuvre; on peut mê
 
 ## Modèles factoriels implicites ou statistiques
 
-Soit $\hat{Sigma}$ l'estimation de la matrice de covariance et $X_k, k=1, \ldots, K$ les vecteurs propres retenus.
+Soit $\hat{\Sigma}$ l'estimation de la matrice de covariance et $X_k, k=1, \ldots, K$ les vecteurs propres retenus.
 La série temporelle de réalisation du facteur $k$ est:
 $$
 \hat{f}_{kt} = X^T_k R_t

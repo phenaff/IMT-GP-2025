@@ -175,7 +175,7 @@ par(op)
 ```
 
 
-## Rescaling daily return by $\sigma(r_{t-1})$ [@Chen-2008]
+## Rescaling daily return by $\sigma(|r_{t-1}|)$ [@Chen-2008]
 
 $$
 z_t = \frac{r_t}{\sigma(|r_{t-1}|)}
@@ -194,7 +194,7 @@ $$
 
 ## Rescaling of daily return by $\sigma(|r_{t-1}|)$
 
-```{r powerlaw-1, echo=FALSE, warning=FALSE, message=FALSE, fig.height=6, fig.align="center"}
+```{r powerlaw-1, echo=FALSE, warning=FALSE, message=FALSE, out.width="70%", fig.align="center"}
 
 nb <- 8
 params = list(lambda=0.94, nb.init=250)
