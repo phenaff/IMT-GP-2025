@@ -175,6 +175,18 @@ On suppose que le rendement non-anticipé d'un actif est une fonction linéaire 
 R_{it} = E_i + \sum_{k=1}^K \beta_{ik} F_{kt} + \epsilon_{it}
 \end{align}
 
+Avec: 
+
+$R_{it}$
+:   Rendement observé 
+
+$E_i$
+:   Rendement anticipé (espérance de rendement)
+
+$F_{kt}$
+:   Rendement non-anticipé du facteur $k$
+
+
 ## Version simplifiée
 
 Commençons par une version simplifiée de (\ref{eq:apt-1}), sans terme d'erreur. Avec $N$ actifs risqués et $K$ facteurs, la relation s'écrit:
@@ -184,10 +196,11 @@ Commençons par une version simplifiée de (\ref{eq:apt-1}), sans terme d'erreur
 r = \mu + Bf
 \end{align}
 
-ou $B$ est une matrice $N x K, \E(f_i) = 0, \Cov(f) = \Phi$. Constituons un portefeuille d'actifs risqués de poids $w \in R^N$ tel que $w$ est orthogonal aux colonnes de $B$
+ou $r$ est une variable aléatoire de dimension $N$,
+$B$ est une matrice $N \times K, \E(f_i) = 0, \Cov(f) = \Phi$. Constituons un portefeuille d'actifs risqués de poids $w \in R^N$ tel que $w$ est orthogonal aux colonnes de $B$. Le rendement de ce portefeuille est:
 
 \begin{align}
-r_W = (1 - w^T \ones) r_0 + w^Tr
+r_w = (1 - w^T \ones) r_0 + w^Tr
 \end{align}
 
 \begin{align}
@@ -201,17 +214,20 @@ r_W = (1 - w^T \ones) r_0 + w^Tr
 &= 0
 \end{align}
 
-Puisque le portefeuille $w$ est sans risque, sont rendement $w^T\mu = r_0$, ou $w^T(\mu - r_0 \ones) = 0$. Ce qui implique que $(\mu - r_0 \ones)$ est dans le sous-espace généré par les colonnes de $B$. Il existe donc un vecteur $\lambda$ tel que:
+Puisque le portefeuille $w$ est sans risque, sont rendement
+est le taux sans risque: $w^T\mu = r_0$, ou $w^T(\mu - r_0 \ones) = 0$. Ce qui implique que $(\mu - r_0 \ones)$ est dans le sous-espace généré par les colonnes de $B$. Il existe donc un vecteur $\lambda$ tel que:
 
 \begin{align}
 (\mu - r_0 \ones) = B\lambda
 \end{align}
 
-Pour revenir à la notation initiale, on a établi que l'espérance d'excès de rendement  d'un actif risqué est une fonction linéaire des primes de risque $\lambda_k$ associées aux facteurs de risque:
+Pour revenir à la notation initiale, on a établi que l'espérance d'excès de rendement  d'un actif risqué est une fonction linéaire des primes de risque $\lambda$ associées aux facteurs de risque:
 
 \begin{align}
-\mu_i - r_0 = \sum_k \beta_{ik} \lambda_k
+E_i - r_0 = \sum_k \beta_{ik} \lambda_k
 \end{align}
+
+où $\beta_{ik}$ est l'exposition du titre $i$ au facteur $k$.
 
 ## Modèle avec terme d'erreur
 
@@ -223,27 +239,24 @@ r = \mu + Bf + \epsilon
 
 avec $\Cov(\epsilon) = \sigma^2 I, \E(\epsilon) = 0, \Cov(\epsilon, f) = 0$.
 
-On construit $(N-K)$ portefeuilles $v_i, i=1, \ldots, N-K$, orthogonaux entre eux et orthogonaux aux colonnes de $B$. Soit $v_{i,j}$ le poid de l'actif $j$ dans le portefeuille $i$. Sans perte de généralité, on pose $\sum_j v_{i,j} = 1$. Finalement, définissons le portefeuille $v$, moyenne des portefeuilles précédents:
+On procède comme précédement en construisant un portefeuille diversifié composé des $N$ actifs, orthogonal aux colonnes de $B$. 
+
+Soit $a = \max |w_i|, i=1, \ldots, N-$. Avec un portefeuille suffisament diversifié, $a$ est $O(1/N)$. Calculons la variance du rendement de ce portefeuille moyen:
 
 \begin{align}
-v = \frac{1}{N-K} \sum_{i=1}^{N-K} v_i
+\Var(w^Tr) &= \Var(w^TBf + w^T \epsilon) \\
+&= Var(\sum_i w_i  \epsilon) \\
+&\leq N a^2 \sigma^2
 \end{align}
 
-Soit $a = \max |v_i|, i=1, \ldots, N-K$. Avec des portefeuilles suffisament diversifiés, $a$ est $O(1/N)$. Calculons la variance du rendement de ce portefeuille moyen:
+Comme $a \sim O(1/N)$, pour $N$ grand $\Var(w^Tr) \sim 0$ et le portefeuille $w$ est essentiellement sans risque. Donc:
 
 \begin{align}
-\Var{v^Tr} &= \Var(v^TBf + v^T \epsilon) \\
-&= \frac{1}{(N-K)^2} Var((\sum_i v_i )^T \epsilon) \\
-&\leq \frac{1}{(N-K)^2} (N-K) N a^2 \sigma^2 \\
-&\leq \frac{1}{N(N-K)} \sigma^2
+w^Tr & = w^T\mu \\
+& = r_0
 \end{align}
 
-Pour $N >> K$, le portefeuille $v$ est essentiellement sans risque, et donc:
-\begin{align}
-\E(v^Tr) = r_0
-\end{align}
-
-Par un raisonnement similaire à celui de la section précédente, on déduit que dans ce modèle également, l'espérance de rendement est
+Par un raisonnement similaire à celui de la section précédente, on déduit que dans ce modèle également, l'espérance d'excès de rendement est
 une fonction linéaire des primes de risque associées aux facteurs:
 
 \begin{align}
@@ -260,7 +273,7 @@ R_{it} = E_i + \sum_{k=1}^K \beta_{ik} F_{kt} + \epsilon_{it}
 et on en déduit que l'espérance de l'excès de rendement de ces actifs risqués est uniquement une fonction des prime de risques des facteurs auxquels le titre est exposé:
 
 \begin{align}
-E_i - r_0 = \sum_k \beta_{ik} (r_{F_k} - r_0)
+E_i - r_0 = \sum_k \beta_{ik} (r_{F_k})
 \end{align}
 
 # Mise en oeuvre
