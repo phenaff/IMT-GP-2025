@@ -1,0 +1,136 @@
+---
+title: "Finance Quantitative"
+subtitle: "TP 1: Courbe zéro-coupon et modèle de Black-Derman-Toy"
+author: Patrick Hénaff
+date: "Version: `r format(Sys.Date(), '%d %b %Y')`"
+output:
+  pdf_document:
+    keep_tex: false
+    fig_caption: yes
+    latex_engine: pdflatex
+    number_sections: true
+geometry: margin=1in
+
+header-includes:
+  - \usepackage[utf8]{inputenc}
+  - \usepackage{eurosym}
+  - \usepackage{tikz}
+  - \usetikzlibrary{matrix}
+  - \usepgflibrary{shapes.misc}
+  - \usetikzlibrary{arrows,shadows}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+```{r load-libraries, include=FALSE, echo=TRUE}
+library(kableExtra)
+library(nleqslv)
+library(stats)
+library(plotrix)
+library(lubridate)
+library(dplyr)
+library(timeDate) # For business day calculations
+library(bizdays)
+```
+
+Ce projet comporte trois parties:
+- Calcul d'une courbe zéro-coupon à partir d'un échantillon d'obligations
+- Construction d'un modèle de Black-Derman-Toy
+- Calcul du prix de quelques obligations comportant des clauses optionnelles
+
+
+# Calcul d'une courbe zéro-coupon
+
+On se propose d'estimer une courbe de taux zéro-coupon en utilisant le modèle de [@Swensson1994]. Ce modèle est utilisé par la Banque Centrale Européenne pour publier quotidiennement la courbe de taux des emprunts d'Etat de la zone Euro.
+
+Le taux zéro-coupon de maturité $T$ est donné par l'expression:
+
+\begin{align}
+z(t) = & \beta_0 + \beta_1 \frac{1-\exp{-t/\tau_1}}{t/\tau_1} \\
+       & + \beta_2 \left( \frac{1-\exp{-t/\tau_1}}{t/\tau_1} - \exp{-t/\tau_1} \right) \\
+       & + \beta_3 \left( \frac{1-\exp{-t/\tau_2}}{t/\tau_2} - \exp{-t/\tau_2} \right) 
+\end{align}
+
+Les données relatives aux obligations sont disponibles dans le fichier "prix_obligations.csv". Un extrait figure dans le tableau ci-dessous.
+Pour chaque titre on dispose de la date de maturité, du coupon en %, et du prix "pied de coupon" observé le 20 février 2025, pour 100 de nominal.
+
+Les étapes du calcul:
+
+- Pour chaque titre, calculer le prix "coupon plein", c'est à dire la valeur actualisée des flux futurs. On rappelle que le prix "coupon plein" est le égal au prix "pied de coupon" plus le coupon couru. Utiliser la convention ACT/ACT pour le décompte des jours.
+
+- Ecrire une fonction qui calcule l'échéancier des paiements futurs de chaque obligation. Pour déterminer la date de chaque paiement, on utilisera la règle "Modified Following", en ne prenant en compte que les fins de semaines. On ne prend pas en compte des jours fériés.
+
+- Ecrire une fonction qui calcule la valeur actualisée de chaque obligation en fonction des paramètres du modèle de Swensson. Le modèle de Swensson donne un taux continu.
+
+- Finalement, déterminer les 6 paramètres du modèle par minimisation de l'erreur globale de valorisation. Comme les obligations de l'échantillon ont des maturité très différentes, on pourra normaliser l'erreur sur chaque titre par la duration du titre. 
+
+Pour présenter les résultats, on pourra reporter sur un graphe les prix (ou les rendements) calculés et les prix (ou les rendements) observés des obligations.
+
+
+```{r, echo=F}
+df.o <- read.csv("prix_obligations.csv",
+                           colClasses=c("character", "character", NA))
+df.o$dt.maturity <- as.Date(df.o$dt.maturity, format("%Y-%m-%d"))
+df.o$Nom <- sapply(seq_along(df.o$dt.maturity), function(x) paste('Bond-',x, sep=''))
+nb.bonds <- nrow(df.o)
+kable(df.o[1:10,],
+      col.names=c("Dt Maturité", "Coupon (%)", "Prix", "Id"),
+      format="latex", booktabs=T)%>%
+  kable_styling(position="center")
+```
+
+# Le modèle de Black-Derman-Toy
+
+On considère le modèle de Black, Derman et Toy décrit dans la note de cours.
+
+La courbe de volatilité (en %) du taux zéro-coupon est donnée par la fonction
+
+```{r vol-curve-def, echo=TRUE}
+vol.curve <- splinefun(c(0,5,10,20), c(1, 0.8, 0.6, 0.4)/5)
+```
+
+Les étapes du calcul:
+
+1. Calibrage de l'arbre: généraliser la méthode de calibration vue en cours pour pouvoir construire un arbre de $n$ pas, et d'incrément $\Delta t$.
+
+2. A partir de l'article de Boyle (2000), utiliser les prix d'Arrow-Debreu pour optimiser les calculs. 
+3. Construire un arbre de maturité 5 ans, par pas de temps de 1 mois. 
+
+4. Vérifier la conformité de l'arbre en valorisant une obligation zéro coupon et une obligation à coupon fixe dans l'arbre. Vous devez reproduire exactement les prix obtenus par actualisation des flux avec les taux zéro-coupon.
+
+# Options sur obligations
+
+## Option sur un zero-coupon
+
+Calculer le prix d'une option d'achat de maturité 1 an, de strike 91, sur une obligation zéro-coupon de maturité 5 ans.
+
+
+## Options sur obligation
+
+On considère maintenant une obligation de maturité 9 ans versant un coupon annuel de 3%, et une option d'achat de strike 100 et de maturité 1 an sur cette obligation.
+
+## Obligation avec option de remboursement anticipé
+
+Les obligations avec option de remboursement anticipé ("callable bonds") sont émises de façon régulière. Elles donnent l'opportunité, pour l'émetteur, de pouvoir se refinancer à meilleur compte en cas de baisse des taux.
+
+On considère une obligation de maturité 10 ans, remboursable au pair à la date aniversaire de l'émission, c'est à dire une fois par an, et ce à partir du 5ème aniversaire. Il y aura donc 5 opportunité de remboursement anticipé.
+
+On se propose de valoriser une telle obligation dans le modèle de Black-Derman-Toy afin de mesurer la valeur de cette option de remboursement anticipé.
+
+Pour ce faire, on va calculer la valeur actualisée de l'obligation par récursion inverse dans l'arbre.
+A chaque date anniversaire où l'option de remboursement peut être exercée, on devra comparer la valeur actualisée de l'obligation à la valeur de remboursement immédiat, et effectuer le choix optimal du point de vue de l'émetteur.
+
+Les détails de l'obligation sont les suivants:
+
+- date de maturité: 23 février 2035
+
+- coupon annuel: 3%
+
+Les obligations sont en grande majorité émises au pair. Quel doit être le taux de coupon pour que ces obligations (avec ou sans clause de remboursement anticipé) puissent être émises au pair?
+
+
+
+
+
