@@ -50,7 +50,7 @@ b <- 0.0
 T <- 1
 ```
 
-La courbe de volatilité est donnée par un polynôme du second degré. La volatilité de "Black-Scholes" est la volatilité à l'argent, réputée indépendante du strike.
+La courbe de volatilité est donnée par un polynôme du second degré (en pratique, des modèles plus sophistiqués sont bien sûr utilisés). La volatilité de "Black-Scholes" est la volatilité à l'argent, réputée indépendante du strike.
 
 ```{r, echo=TRUE}
 ## quadratic smile coefficients
@@ -78,7 +78,7 @@ plot(log(KRange/S), vol.smile, type="l", col="red", lwd=2, xlab="log(K/S)")
 
 ## Options Européenne
 
-Calcul du prix d'un call avec volatilité fonction du strike.
+Pour faciliter les calculs, on crée une fonction qui prend l'algorithme de smile comme argument:
 
 ```{r, echo=TRUE}
 # Call avec smile de volatilité
@@ -98,29 +98,10 @@ Le résultat sera une fonction
 
 ```{r}
 d2CdK2 <- function(K, vol.f) {
-dK <- 1.e-4
-(1/dK^2) * 
-      (call.sm(K-dK, vol.f) - 2*call.sm(K, vol.f) + call.sm(K+dK, vol.f))
-}
-
-smile.pdf <- function(K) {
-  exp(r*T) * d2CdK2(K, smileVol)
-} 
-
-bs.pdf <- function(K) {
-  exp(r*T) * d2CdK2(K, bsVol)
 }
 ```
 
-## Vérification
-
-```{r}
-int.bs <- integrate(bs.pdf, lower=10, upper=500, subdivisions=1000, 
-                 rel.tol=1.e-4, abs.tol=1.e-4)$value
-int.smile <- integrate(smile.pdf, lower=10, upper=500, subdivisions=1000, 
-                 rel.tol=1.e-4, abs.tol=1.e-4)$value
-print(paste("Integrale bs.pdf: ", int.bs, "Integrale smile.pdf: ", int.smile))
-```
+Vérifier numériquement que $\int p(S_T) dS_T = 1$.
 
 
 ## Valorisation d'un call digital strike=105
@@ -134,19 +115,3 @@ $$
 
 
 Vérifiez l'intégration numérique de la distribution log-normale à l'aide de la formule analytique du call digital.
-
-
-```{r}
-K <- 105
-digital.bs <- integrate(bs.pdf, lower=K, upper=700, subdivisions=1000, 
-                 rel.tol=1.e-4, abs.tol=1.e-4)$value
-digital.smile <- integrate(smile.pdf, lower=K, upper=700, subdivisions=1000, 
-                 rel.tol=1.e-4, abs.tol=1.e-4)$value
-print(paste("Digital call ", K, " bs.pdf: ", round(digital.bs*100,2), "%", " smile.pdf: ", round(digital.smile*100,2), "%"))
-```
-digital.payoff <- function(K) {
-  100
-}
-
-prix.digital.bs <- 
-}
