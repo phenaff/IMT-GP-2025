@@ -1,0 +1,205 @@
+---
+title: "Finance Quantitative"
+subtitle: "Modèle de Black-Derman-Toy"
+author: Patrick Hénaff
+date: "Version: `r format(Sys.Date(), '%d %b %Y')`"
+output:
+  pdf_document:
+    keep_tex: false
+    fig_caption: yes
+    latex_engine: pdflatex
+    number_sections: true
+geometry: margin=1in
+
+header-includes:
+  - \usepackage[utf8]{inputenc}
+  - \usepackage{eurosym}
+  - \usepackage{tikz}
+  - \usetikzlibrary{matrix}
+  - \usepgflibrary{shapes.misc}
+  - \usetikzlibrary{arrows,shadows}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+```{r 410-init-1,echo=TRUE,results='hide', message=FALSE}
+  library(linprog)
+  library(xtable)
+  library(nleqslv)
+  library(kableExtra)
+```
+
+We introduce the interest rate model due to F. Black, E. Derman and W. Toy, which was one of the first model to match exactly a zero-coupon curve and a volatility curve of zero-coupon bonds. Modern models such as the Libor Market Model tend to match the forward rates and volatilities, because such data is directly observable in the market for interest rate caps and floors. The Black-Derman-Toy (BDT) model is still worth studying, because it provides a simple framework for understanding how term structure models can be used to price and manage the risk of interest rate derivatives.
+
+The model was originally presented in an algorithmic matter, by presenting its construction in a binomial tree. 
+Later, authors have studied the continuous time limit of the binomial model to establish that the dynamic of the short rate in the BDT model is given by:
+
+$$
+d  \ln r(t) = \left[ \theta(t) + \frac{\sigma'(t)}{\sigma(t)} \ln r(t) \right] dt + \sigma(t) dW
+$$
+where $\theta(t)$ and $\sigma(t)$ are determined so that the model fits exactly the zero-coupon curve and the term structure of zero-coupon volatility.
+
+The rate $r(t)$ follows a log-normal process, which, up to a recent past, was considered a desirable feature since it prevents the rate from being negative. 
+
+There are two ways of specifying the rate volatility: the original BDT model fits the term structure of volatility of zero-coupon yields, but one can also use the volatility of caps and swaptions, which have the advantage of being directly observable. In this note, we follow the original specification of the BDT model. A two-period model is represented below.
+
+
+```{r, echo=FALSE, engine='tikz', out.width='30%', fig.ext=if (knitr:::is_latex_output()) 'pdf' else 'png'}
+\usetikzlibrary{shapes.multipart}
+\usetikzlibrary{shapes}
+
+\begin{tikzpicture}[level distance=2.5cm]
+    \tikzstyle{level 0}=[rectangle, draw]
+    \tikzstyle{level 1}=[rectangle, draw]
+    \tikzstyle{level 2}=[rectangle, draw]
+    \tikzstyle{edge from parent}=[->,draw]
+    \tikzstyle{blank}=[rectangle]
+    \node[level 0] {$r$} [grow'=right,sibling distance=3cm]
+      child {node[level 1,label=above:{A}] {$r_u$}
+             child {node[level 2] {$r_{uu}$}
+             edge from parent node[blank,above left] {$1/2$}
+                   }
+             child {node[level 2] {\phantom{$r_{ud}$}}
+                    edge from parent node[blank,below left] {$1/2$}
+                   }
+             edge from parent node[blank,above left] {$1/2$}
+            }
+      child {node[level 1,label=above:{B}] {$r_d$}
+             child {node[level 2] {$r_{ud}$}
+                    edge from parent node[blank,above left] {$1/2$}
+                   }
+             child {node[level 2] {$r_{dd}$}
+                    edge from parent node[blank,below left] {$1/2$}
+                   }
+             edge from parent node[blank,below left] {$1/2$}
+            };
+\end{tikzpicture}
+```
+
+
+The inputs to the model are a zero-coupon curve $z(t)$ and a volatility curve of zero-coupon yields $\beta(t)$ ($\sigma(t)$ is the local volatility at time $t$). Considering a zero coupon bond maturing at $2\Delta t$, its price $B(0, 2 \Delta t)$ is:
+
+\begin{align}
+B(0, 2 \Delta t) &= \frac{1}{(1+z(2 \Delta t))^2} \\
+&= \frac{1}{1+r \Delta t} \left[ \frac{1}{2} \frac{1}{1+r_u \Delta t} + \frac{1}{2} \frac{1}{1+r_d \Delta t} \right]
+\end{align}
+
+Matching the volatility curve provides a second equation. Consider a zero-coupon maturing at $k\Delta t$, its price at node $A$ ($B$) is $P_A(k\Delta t)$ ($P_B(k\Delta t)$) and the corresponding yield is $Y_A(k \Delta t)$ ($Y_B(k\Delta t)$).
+The variance of the logarithm of the zero-coupon yield is estimated at the first time step in the tree (omitting the time argument for clarity):
+
+\begin{align}
+V(\ln z(k\Delta t)) &= \frac{1}{2} \left(\ln Y_A\right)^2 + \frac{1}{2} \left(\ln Y_B\right)^2 - \left[ \frac{\ln Y_A + \ln Y_B}{2} \right]^2 \\
+&= \left[ \frac{1}{2} (\ln Y_A - \ln Y_B) \right]^2 \\
+&= \beta(k \Delta t)^2 (k-1) \Delta t
+\end{align}
+or,
+
+$$
+\ln \left(\frac{Y_A}{Y_B} \right) = 2 \beta(k \Delta t) \sqrt{(k-1) \Delta t}
+$$
+For a zero coupon bond maturing in two time steps, we have $Y_A = r_u$ and $Y_B = r_d$, so that we have a system of two equations to determine $r_u$ and $r_d$:
+
+\begin{align}
+\ln(\frac{r_u}{r_d}) &= 2 \sigma(2\Delta t) \sqrt{ \Delta t} \label{eq:step-10}\\
+\frac{1}{(1+z(2 \Delta t))^2} &= \frac{1}{1+r \Delta t} \left[ \frac{1}{2} \frac{1}{1+r_u \Delta t} + \frac{1}{2} \frac{1}{1+r_d \Delta t} \right] \label{eq:step-11}
+\end{align}
+The other time slices are solved in a similar fashion. The process is illustrated by a simple example where we construct a 5-steps tree, with annual increments that matches the market data summarized in the table.
+
+
+```{r, echo=FALSE}
+options(knitr.kable.NA = "")
+df <- data.frame(mat = seq(5), z=c(10,11,12,12.5,13), b=c(NA, 19,18,17.5,16))
+kable(df, format="latex", booktabs=TRUE,escape=FALSE, col.names = c("Maturity", "$z(t)$", "$\\beta(t)$"))
+```
+
+
+# Illustration
+
+We start by solving equations \ref{eq:step-10} and \ref{eq:step-11} for $r_u$ and $r_d$.
+
+```{r, echo=FALSE}
+
+# step 1
+
+df <- function(r) 1/(1+r)
+
+obj <- function(r.vec) {
+  r.u <- r.vec[1]
+  r.d <- r.vec[2]
+  res <- numeric(2)
+  res[1] <- df(.1) * (1/2) * (df(r.u) + df(r.d)) - df(.11) **2
+  res[2] <- (1/2) * log(r.u/r.d) - 0.19
+  res
+}
+
+sol <- nleqslv(as.vector(c(.1, .1)), obj)
+r.u <- sol$x[1]
+r.d <- sol$x[2]
+```
+
+The solution is $r_u = `r round(r.u,3)`$ and $r_d = `r round(r.d,3)`$. Using the fact that the local volatility is constant in a time slice, we have:
+
+$$
+\ln \left(\frac{r_{uu}}{r_{du}} \right) = \ln \left(\frac{r_{du}}{r_{dd}} \right) = \alpha
+$$
+so that, irrespective of the number of nodes in a time slice, we need to solve a system of two non linear equations with unknowns $r_0$ (the short rate for the lowest node) and $\alpha$.
+
+
+```{r, echo=FALSE}
+obj <- function(r.vec) {
+  r.dd <- r.vec[1]
+  alpha <- r.vec[2]
+  r.ud <- r.dd*alpha
+  r.uu <- r.ud*alpha
+  res <- numeric(2)
+  P.A <- df(r.u) * (1/2) * (df(r.uu) + df(r.ud))
+  P.B <- df(r.d) * (1/2) * (df(r.ud) + df(r.dd))
+  
+  res[1] <- df(.1) * (1/2) * ( P.A + P.B) - df(.12)^3
+  Y.A <- sqrt(1/P.A) - 1
+  Y.B <- sqrt(1/P.B) - 1
+  res[2] <- (1/2) * log(Y.A / Y.B) - 0.18
+  res
+}
+
+sol <- nleqslv(as.vector(c(.1, 1)), obj)
+r.dd <- sol$x[1]
+alpha <- sol$x[2]
+```
+
+We obtain the following values for the short rates in the second time slice:
+\ 
+\
+
+```{r, echo=FALSE, fig.align="center"}
+options(knitr.kable.NA = "")
+df <- data.frame(r = c(r.dd*alpha^2, r.dd*alpha, r.dd))
+rownames(df) =  c("$r_{uu}$", "$r_{ud}$", "$r_{dd}$")
+kable(df, format="latex", booktabs=TRUE,escape=FALSE, row.names = TRUE)
+```
+
+
+# Analytical representation
+
+In the BDT model, future short rates are lognornal variables: $r(t) = u(t) e^{\sigma(t) Z(t)}$, where $u(t)$ is the median short rate.
+Let
+
+$$
+y(t) = \ln r(t) = \ln u(t) + \sigma(t) Z(t)
+$$
+
+From which we get:
+
+$$
+Z(t) = \frac{\ln r(t) - \ln u(t)}{\sigma(t)}
+$$
+
+\begin{align}
+dy & = \frac{d \ln u}{dt} dt + \sigma'(t) Z(t) dt + \sigma(t) dZ \\
+   & = \frac{d \ln u}{dt} dt + \sigma'(t) \left[ \frac{y - \ln u(t)}{\sigma(t)}\right] dt + \sigma(t) dZ \\
+   & = \left[ \frac{d \ln u}{dt} + \frac{\sigma'(t)}{\sigma(t)} \left[ y - \ln u(t)\right] \right] dt + \sigma(t) dZ
+\end{align}
+
+The last expression shows the mean-reverting feature of the $\ln r(t)$ process.
