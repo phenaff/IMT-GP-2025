@@ -1,0 +1,94 @@
+---
+title: "Finance Quantitative"
+subtitle: |
+  | Valorisation d'un produit structuré
+  | de type "shark"
+author: Le groupe de travail 
+date: "Version: `r format(Sys.Date(), '%d %b %Y')`"
+output:
+  pdf_document:
+    keep_tex: false
+    fig_caption: yes
+    latex_engine: pdflatex
+    extra_dependencies: ["float"]
+geometry: margin=1in
+
+header-includes:
+  - \usepackage[utf8]{inputenc}
+  - \usepackage{float}
+  - \floatplacement{figure}{H}
+  - \usepackage{amsmath}
+  - \usepackage{amsfonts}
+  - \usepackage{amssymb}
+  - \usepackage[utf8]{inputenc}
+  - \usepackage[cyr]{aeguill}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+knitr::opts_chunk$set(fig.pos = "h", out.extra = "")
+```
+
+```{r load-libraries, include=TRUE, echo=TRUE, message=FALSE, warning=FALSE}
+library(fOptions)
+
+```
+
+ 
+# Le produit "Shark"
+
+On se propose de valoriser un produit structuré de type "Shark", décrit dans la note d'information "EMTN Shark Eurostoxx50 Janvier 2016".
+
+A maturité (3 ans) l'acheteur recevra le remboursement suivant, fonction de la valeur de l'indice sous-jacent $S_t$:
+
+\begin{itemize}
+\item Si $S_t>125$ le client reçoit 105.
+\item Si $100 \leq S_t \leq 125$, le client reçoit $S_t$.
+\item Si $S_t < 100$, le client reçoit 100.
+\end{itemize}
+
+# Questions
+
+L'objectif de ce travail est de déterminer la valeur de ce produit structuré.
+
+## Valorisation analytique
+
+Déterminer un portefeuille composé de call Européen et d'options digitales qui
+reproduit le payoff du produit structuré.
+
+Valoriser ce portefeuille avec les données de marché ci-dessous.
+
+```{r, echo=TRUE}
+S.0 <- 100
+r <- 0.02
+div <- 0.03
+TTM <- 3
+sigma <- 0.2
+```
+
+
+## Valorisation par arbre binomial
+
+- Ecrire une fonction qui calcule le payoff du produit structuré à maturité.
+- A titre de vérification, vous pouvez calculer le prix d'un call Européen à
+l'aide de l'arbre et avec une formule analytique.
+- Utiliser cette fonction pour valoriser le produit structuré dans un arbre binomial, avec les mêmes données de marché que plus haut. Comparez les résultats.
+
+
+## Shark Américain
+
+On se propose de modifier le produit structuré pour qu'il puisse être 
+exercé à tout moment à partir de la fin de la deuxième année.
+On souhaite que la valeur actualisée du produit reste le même que dans le cas initial.
+Pour cela, on envisage d'ajouter une clause à la formule de valeur d'exercise.
+Si $S_t < K_{\textrm{min}}$, alors la valeur d'éxercise est $S_t$, c'est à dire que le capital n'est plus garanti en cas de forte baisse de l' indice.
+
+Déterminer la valeur de $K_{\textrm{min}}$, en utilisant un arbre binomial (plus facile), ou la méthode "LS Monte Carlo" (plus difficile... points de bonus!).
+
+1. Construire une fonction pour calculer le prix d'un payoff quelconque, exercise Américain, dans un arbre binomial.
+
+2. Etudier l'article de Longstaff et Schwartz et implémenter la méthode "LSM"
+pour valoriser le "shark" Américain.
+
+Comparez les résultats.
+
