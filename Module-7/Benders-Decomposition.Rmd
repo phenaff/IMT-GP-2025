@@ -1,0 +1,160 @@
+---
+title: "Quantitative Finance"
+subtitle: "Benders Decomposition" 
+author: "Patrick Hénaff"
+date: "Version: `r format(Sys.Date(), '%d %b %Y')`"
+
+output:
+  pdf_document:
+    keep_tex: no
+    fig_caption: yes
+    latex_engine: pdflatex
+csl: ../apa.csl
+geometry: margin=1in
+bibliography: ../library.bib
+email: pa.henaff@gmail.com
+fontfamily: mathpazo
+fontsize: 11pt
+header-includes:
+  - \linespread{1.05}
+  - \usepackage[utf8]{inputenc}
+  - \usepackage{pgfplots}
+  - \usepackage{tikz}
+  - \usetikzlibrary{shapes}
+  - \usetikzlibrary{external}
+  - \usepgfplotslibrary{external}
+  - \usepackage[ruled, vlined, linesnumbered]{algorithm2e}
+---
+
+```{r, echo=TRUE,results='hide', message=FALSE}
+  library(foreach)
+  library(doParallel)
+  library(kableExtra)
+  library(linprog)
+  library(gtools)
+  library(pracma)
+  library(kernlab)
+  library(optiSolve)
+  library(piqp)
+  library(latex2exp)
+```
+
+The algorithm due to Benders provides a practical strategy for solving two-stage stochastic optimization problems.
+The principle of the method is to observe that in an optimization problem, there are sometimes 
+"complicating variables", in the sense that, if these variables were known, the remaining problem would be
+simple to solve. In a mixed-integer programming problem, the "complicating variables" are the integer
+variables. In a two-stage problem with recourse, they are the variables pertaining 
+to the first stage decision. 
+
+We first present the method with a simple model, then explore how it may be used to solve stochastic optimization problems
+with recourse.
+
+# The Benders decomposition algorithm
+
+Consider the problem
+
+$$
+\begin{aligned}
+    \mbox{min} \ \ & c^T x + f^T y  \\
+    \mbox{s.t.} & \\
+    & Ax = b \\
+    & Bx + Dy = d \\
+    & x \geq 0; y \geq 0
+  \end{aligned}
+$$
+
+The problem is reformulated as follows:
+
+$$
+\begin{aligned}
+    \mbox{min} \ \ & c^T x + z(x) \\
+    \mbox{s.t.} & \\
+    & Ax = b \\
+    & x \geq 0
+  \end{aligned}
+$$
+
+with 
+
+$$
+\begin{aligned}
+    P2: z(x) = \mbox{min} \ \ & f^T y \\
+    \mbox{s.t.} & \\
+    & Dy = d - Bx \\
+    & y \geq 0
+  \end{aligned}
+$$
+
+Let $D2$ be the dual of $P2$:
+
+$$
+\begin{aligned}
+    D2: z(x) = \mbox{max}_p \ \ &  p^T(d - Bx) \\
+    \mbox{s.t.} & \\
+    & Dp \leq f 
+  \end{aligned}
+$$
+
+The domain $\{p| D^Tp \leq f\}$ is defined by a set of extreme points $p^i, i=1, \ldots, I$ and of extreme rays
+ $r^j, j=1, \ldots, J$.
+ 
+ If $D2$ is unbounded, there exists an extreme ray $r^j$ such that $(r^j)^T(d - Bx) > 0$.
+ 
+ If the solution $\bar{x}$ of $D2$ is finite, that solution identifies an extreme point $p^i$ of 
+ the domain such that $z(\bar{x}) = (p^i)^T(d-Bx)$.
+ 
+ We can, in theory, restate $D2$ in terms of the extreme points and extreme rays of the feasible domain;
+ this is called the full master problem:
+ 
+$$
+\begin{aligned}
+    FMP: z(x) = \mbox{min} \ \ & c^Tx + z \\
+    \mbox{s.t.} & \\
+    & Ax = b \\
+    & x \geq 0 \\
+    & (p^i)^T(d-Bx) \leq z, i=1, \ldots, I \\ 
+    & (r^j)^T(d-Bx) \leq 0, j=1, \ldots, J \\ 
+  \end{aligned}
+$$
+
+The set of extreme points and extreme rays may be very large, and we expect that only a few constraints will be active 
+at the optimum. The idea behind Benders' partitioning is therefore to progressively build the set of 
+constraints, until we reach an optimum of FMP which is feasible for the original problem.
+
+The above formulation, with only a subset of extreme rays and extreme points constraints is called the
+restricted master problem (RMP).
+
+Assume that we have just solved the RMP with $l$ constraints:
+
+$$
+\begin{aligned}
+    FMP: z(x) = \mbox{min} \ \ & c^Tx + z \\
+    \mbox{s.t.} & \\
+    & Ax = b \\
+    & x \geq 0 \\
+    & (p^i)^T(d-Bx) \leq z, i=1, \ldots, k-l \\ 
+    & (r^j)^T(d-Bx) \leq 0, j=1, \ldots, l \\ 
+  \end{aligned}
+$$
+
+and obtained the solution $(\bar{x}, \bar{z})$. Does this solution violate any constraint not included thus far?
+To answer that question, we solve
+
+$$
+\begin{aligned}
+    Q(\bar{x}): \mbox{max} \ \ & p^T(d-B\bar{x}) \\
+    \mbox{s.t.} & \\
+    & Dp < f 
+  \end{aligned}
+$$
+
+If $Q(\bar{x})$ is unbounded, the linear program reveals a new extreme ray $r^j$ such that $(r^j)^T(d-B\bar{x})>0$.
+Therefore, $r^j$ violates the constraint $(r^j)^T(d-B\bar{x}) \leq 0$, and that constraint must be added to the 
+RMP.
+
+If $Q(\bar{x})$ is finite, the linear program reveals a new extreme point $p^i$.
+If $(p^i)^T(d-B\bar{x})>\bar{z}$, the extreme point violates the constraints of the RMP, and that constraint 
+must added to the RMP.
+Otherwise, we conclude that the RMP provides a solution $(\bar{x}, \bar{z})$ that is feasible and 
+optimal for the FMP.
+
