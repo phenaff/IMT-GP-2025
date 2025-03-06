@@ -22,6 +22,7 @@ header-includes:
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = FALSE)
+options(knitr.kable.NA = "")
 ```
 
 ```{r 410-init-1,echo=TRUE,results='hide', message=FALSE}
@@ -99,6 +100,7 @@ or,
 $$
 \ln \left(\frac{Y_A}{Y_B} \right) = 2 \beta(k \Delta t) \sqrt{(k-1) \Delta t}
 $$
+
 For a zero coupon bond maturing in two time steps, we have $Y_A = r_u$ and $Y_B = r_d$, so that we have a system of two equations to determine $r_u$ and $r_d$:
 
 \begin{align}
@@ -146,7 +148,6 @@ $$
 $$
 so that, irrespective of the number of nodes in a time slice, we need to solve a system of two non linear equations with unknowns $r_0$ (the short rate for the lowest node) and $\alpha$.
 
-
 ```{r, echo=FALSE}
 obj <- function(r.vec) {
   r.dd <- r.vec[1]
@@ -170,16 +171,13 @@ alpha <- sol$x[2]
 ```
 
 We obtain the following values for the short rates in the second time slice:
-\ 
-\
 
 ```{r, echo=FALSE, fig.align="center"}
-options(knitr.kable.NA = "")
 df <- data.frame(r = c(r.dd*alpha^2, r.dd*alpha, r.dd))
 rownames(df) =  c("$r_{uu}$", "$r_{ud}$", "$r_{dd}$")
-kable(df, format="latex", booktabs=TRUE,escape=FALSE, row.names = TRUE)
+kable(df, format="latex", booktabs=TRUE,escape=FALSE,
+row.names = TRUE)
 ```
-
 
 # Analytical representation
 
