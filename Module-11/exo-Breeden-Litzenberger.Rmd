@@ -115,3 +115,5 @@ $$
 
 
 Vérifiez l'intégration numérique de la distribution log-normale à l'aide de la formule analytique du call digital.
+
+Effectuer le même calcul pour un put digital, $K=70$. Est-ce que ces résultats sont cohérents avec votre observation de la densité de $S_T$?
