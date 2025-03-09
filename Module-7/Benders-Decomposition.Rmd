@@ -5,7 +5,7 @@ author: "Patrick Hénaff"
 date: "Version: `r format(Sys.Date(), '%d %b %Y')`"
 
 output:
-  pdf_document:
+  bookdown::pdf_document2:
     keep_tex: no
     fig_caption: yes
     latex_engine: pdflatex
@@ -37,6 +37,23 @@ header-includes:
   library(optiSolve)
   library(piqp)
   library(latex2exp)
+  library(formatdown)
+  library(lpSolveAPI)
+  library(xts)
+  library(PortfolioOptim)
+```
+
+```{r, echo=FALSE}
+get.src.folder <- function() {
+  path.expand("../GP/src")
+}
+
+get.data.folder <- function() {
+  path.expand("../GP/data")
+}
+
+source(file.path(get.src.folder(), 'utils.R'))
+source(file.path(get.src.folder(), 'FileUtils.R'))
 ```
 
 The algorithm due to Benders provides a practical strategy for solving two-stage stochastic optimization problems.
@@ -55,7 +72,7 @@ Consider the problem
 
 $$
 \begin{aligned}
-    \mbox{min} \ \ & c^T x + f^T y  \\
+    V^* = \mbox{min} \ \ & c^T x + f^T y  \\
     \mbox{s.t.} & \\
     & Ax = b \\
     & Bx + Dy = d \\
@@ -63,17 +80,16 @@ $$
   \end{aligned}
 $$
 
-The problem is reformulated as follows:
+In the context of stochastic programming with recourse, $x$ would be the first stage decision variables. The problem is reformulated as follows:
 
 $$
 \begin{aligned}
-    \mbox{min} \ \ & c^T x + z(x) \\
+    V^* = \mbox{min} \ \ & c^T x + z(x) \\
     \mbox{s.t.} & \\
     & Ax = b \\
     & x \geq 0
   \end{aligned}
 $$
-
 with 
 
 $$
@@ -91,24 +107,23 @@ $$
 \begin{aligned}
     D2: z(x) = \mbox{max}_p \ \ &  p^T(d - Bx) \\
     \mbox{s.t.} & \\
-    & Dp \leq f 
+    & D^Tp \leq f 
   \end{aligned}
 $$
 
 The domain $\{p| D^Tp \leq f\}$ is defined by a set of extreme points $p^i, i=1, \ldots, I$ and of extreme rays
  $r^j, j=1, \ldots, J$.
  
- If $D2$ is unbounded, there exists an extreme ray $r^j$ such that $(r^j)^T(d - Bx) > 0$.
+If $D2$ is unbounded, there exists an extreme ray $r^j$ such that $(r^j)^T(d - Bx) > 0$.
+If the solution of $D2$ is finite, that solution identifies an extreme point $p^i$ of 
+ the domain such that the optimal value $z(x) = (p^i)^T(d-Bx)$ is the optimum over all the extreme points.
  
- If the solution $\bar{x}$ of $D2$ is finite, that solution identifies an extreme point $p^i$ of 
- the domain such that $z(\bar{x}) = (p^i)^T(d-Bx)$.
- 
- We can, in theory, restate $D2$ in terms of the extreme points and extreme rays of the feasible domain;
- this is called the full master problem:
+ We can in theory, restate $D2$ in terms of the extreme points and extreme rays of the feasible domain;
+ incorporating this formulation in the original problem, we obtain the full master problem:
  
 $$
 \begin{aligned}
-    FMP: z(x) = \mbox{min} \ \ & c^Tx + z \\
+    FMP: V = \mbox{min}_{x, z} \ \ & c^Tx + z \\
     \mbox{s.t.} & \\
     & Ax = b \\
     & x \geq 0 \\
@@ -128,7 +143,7 @@ Assume that we have just solved the RMP with $l$ constraints:
 
 $$
 \begin{aligned}
-    FMP: z(x) = \mbox{min} \ \ & c^Tx + z \\
+    RMP^k: V^k = \mbox{min}_{x,z} \ \ & c^Tx + z \\
     \mbox{s.t.} & \\
     & Ax = b \\
     & x \geq 0 \\
@@ -137,24 +152,345 @@ $$
   \end{aligned}
 $$
 
-and obtained the solution $(\bar{x}, \bar{z})$. Does this solution violate any constraint not included thus far?
-To answer that question, we solve
+and obtained the solution $(\bar{x}, \bar{z})$. Since this solution may not be feasible for the original problem, we have $V^k <= V^*$. Does this solution violate any constraint not included thus far? To answer that question, we solve
 
 $$
 \begin{aligned}
-    Q(\bar{x}): \mbox{max} \ \ & p^T(d-B\bar{x}) \\
+    Q(\bar{x}): \mbox{max}_p \ \ & p^T(d-B\bar{x}) \\
     \mbox{s.t.} & \\
-    & Dp < f 
+    & D^Tp < f 
   \end{aligned}
 $$
+
+or the corresponding primal, which involves the original variables:
+
+$$
+\begin{aligned}
+    Q(\bar{x}): \mbox{min}_y \ \ & f^Ty \\
+    \mbox{s.t.} & \\
+    & Dy = d - B \bar{x} \\
+    & y \geq 0
+  \end{aligned}
+$$
+
 
 If $Q(\bar{x})$ is unbounded, the linear program reveals a new extreme ray $r^j$ such that $(r^j)^T(d-B\bar{x})>0$.
 Therefore, $r^j$ violates the constraint $(r^j)^T(d-B\bar{x}) \leq 0$, and that constraint must be added to the 
 RMP.
 
-If $Q(\bar{x})$ is finite, the linear program reveals a new extreme point $p^i$.
+If $Q(\bar{x})$ is finite, the linear program identifies an extreme point $p^i$ and a feasible solution $(\bar{x}, \bar{y})$ to the original problem. The objective value $c^T\bar{x} + f^T \bar{y}$ is therefore an upper bound to the solution of the FMP.
 If $(p^i)^T(d-B\bar{x})>\bar{z}$, the extreme point violates the constraints of the RMP, and that constraint 
 must added to the RMP.
 Otherwise, we conclude that the RMP provides a solution $(\bar{x}, \bar{z})$ that is feasible and 
 optimal for the FMP.
 
+# Example 1
+
+Let's consider a small problem that will both illustrate the generation of both types of cuts.
+
+$$
+\begin{aligned}
+    \mbox{min} \ \ & c^T x + f^T y  \\
+    \mbox{s.t.} & \\
+    & Ax = b \\
+    & Bx + Dy = d \\
+    & x \geq 0; y \geq 0
+  \end{aligned}
+$$
+
+with
+
+$$
+c = \begin{bmatrix}
+1 \\ 2 \\ 3 \\ 2 \\1 \end{bmatrix}
+\qquad
+f = \begin{bmatrix}
+4 \\ 5 \\ 4 \end{bmatrix}
+$$
+
+$$
+A = \begin{bmatrix}
+1 & 2 & 3 & 4 & 5 \\
+6 & 7 & 8 & 9 & 10 \end{bmatrix}
+\qquad
+b = \begin{bmatrix}
+6 \\ 15 \end{bmatrix}
+$$
+$$
+B = \begin{bmatrix}
+1 & 2 & 3 & 1 & 2 \\
+3 & 1 & 2 & 3 & 1 \end{bmatrix}
+\qquad
+D = \begin{bmatrix}
+4 & 5 & 6 \\ 7 & 6 & 5 \end{bmatrix}
+\qquad
+d = \begin{bmatrix}
+18 \\ 31 \end{bmatrix}
+$$
+We shall see in a second example that Benders's algorithm is particularly adapted 
+when the $D$ matrix has a special block-diagonal structure, but we 
+postpone that discussion in order to focus of the principles of the algorithm.
+
+The setup and solution of the restricted master problem are implemented as follows.
+The initial version of the RMP only involves the constraint $Ax = b$.
+
+```{r, echo=FALSE}
+cost <- c(1,2,3,2,1)
+f <- c(4,5,4)
+A <- matrix(seq(10), nrow=2, byrow=T)
+b <- c(6,15)
+B <- matrix(c(1,2,3,1,2,3,1,2,3,1), nrow=2, byrow=T)
+D <- matrix(c(4,5,6,7,6,5), nrow=2, byrow=T)
+d <- c(18, 31)
+BigM <- 1.e5
+```
+
+```{r}
+make.rmp <- function() {
+  obj <- c(cost, 1)
+  rmp <- make.lp(ncol=length(obj))
+  set.objfn(rmp, obj)
+  for(i in seq(nrow(A))) {
+    add.constraint(rmp, c(A[i,], 0), "=", b[i])
+  }
+  rmp
+}
+```
+
+At each iteration, an optimality or feasibility constraint is added to the RMP:
+
+```{r}
+solve.rmp <- function(rmp, p=NULL, r=NULL) {
+  
+  # optimality constraint
+  if(!is.null(p)) {
+    new.const <- c(-p %*% B, -1)
+    new.rhs <- -p %*% d
+    add.constraint(rmp, new.const, "<=", new.rhs)
+  }
+  
+  # feasibility constraint
+  if(!is.null(r)) {
+    new.const <- c(-r %*% B, 0)
+    new.rhs <- -r %*% d
+    add.constraint(rmp, new.const, "<=", new.rhs)
+  }
+    
+  status <- solve(rmp)
+  if(status != 0) {
+    print(rmp)
+    stop()
+  }
+  rmp
+}
+```
+
+We solve the dual of the sub-problem, rather than the primal, because the constraint $D^Tp \leq f$ does not change from one iteration to the next. This means that the previous solution to
+the subproblem is a feasible starting point for the next iteration.
+
+```{r}
+make.subproblem <- function() {
+  Amat <- t(D)
+  dim.p <- ncol(Amat)
+  obj <- rep(0, dim.p)
+  sub.p <- make.lp(ncol=dim.p)
+  lp.control(sub.p, sense="max")
+  for(i in seq(nrow(Amat))) {
+    add.constraint(sub.p, Amat[i,], "<=", f[i])
+  }
+  set.bounds(sub.p, lower=rep(-BigM, dim.p), upper=rep(BigM, dim.p))
+  sub.p
+}
+
+solve.subproblem <- function(sub.p, x.bar) {
+  obj <- d - B %*% x.bar
+  set.objfn(sub.p, obj)
+  status <- solve(sub.p)
+  
+  if(status != 0) {
+    print(sub)
+    stop()
+  }
+  sub.p
+}
+```
+
+Let's follow the algorithm one step at a time. We first solve the initial RMP
+
+$$
+\begin{aligned}
+    \mbox{min} \ \ & c^T x  \\
+    \mbox{s.t.} & \\
+    & Ax = b \\
+    & x \geq 0
+  \end{aligned}
+$$
+
+```{r}
+cost <- c(1,2,3,2,1)
+f <- c(4,5,4)
+A <- matrix(seq(10), nrow=2, byrow=T)
+b <- c(6,15)
+B <- matrix(c(1,2,3,1,2,3,1,2,3,1), nrow=2, byrow=T)
+D <- matrix(c(4,5,6,7,6,5), nrow=2, byrow=T)
+d <- c(18, 31)
+
+LB = -Inf
+UB = Inf
+BigM <- 1.e+4
+
+rmp <- make.rmp()
+rmp <- solve.rmp(rmp)
+sol <- get.variables(rmp)
+x.bar <- sol[1:length(cost)]   
+z.bar <- sol[length(sol)]
+opt <- get.objective(rmp)
+```
+
+The solution is $\bar{x}=($ `r format_dcml(x.bar)` $).$ 
+
+Next, we solve the dual sub-problem with the current value of $\bar{x}$.
+
+$$
+\begin{aligned}
+    Q(\bar{x}): \mbox{max}_p \ \ & p^T(d-B\bar{x}) \\
+    \mbox{s.t.} & \\
+    & D^Tp < f 
+  \end{aligned}
+$$
+
+```{r}
+sub <- make.subproblem()
+sub <- solve.subproblem(sub, x.bar)
+p <- get.variables(sub)
+```
+
+The solution is $p=($ `r format_dcml(p)` $).$ The dual is unbounded (le primal is infeasible). The
+solution is an extreme ray $r^1$ that provides a feasibility cut for the restricted master program.
+
+At iteration 2, we solve:
+
+$$
+\begin{aligned}
+    \mbox{min} \ \ & c^T x  \\
+    \mbox{s.t.} & \\
+    & Ax = b \\
+    & (r^1)^T(d-Bx) \leq 0 \\
+    & x \geq 0
+  \end{aligned}
+$$
+
+```{r, echo=FALSE}
+rmp <- solve.rmp(rmp, p=NULL, r=p)
+sol <- get.variables(rmp)
+x.bar <- sol[1:length(cost)]   
+z.bar <- sol[length(sol)]
+opt <- get.objective(rmp)
+```
+
+The solution is $\bar{x} = ($ `r format_dcml(x.bar)` $).$ The objective value provides
+a lower bound to the solution: $LB =$ `r format_dcml(opt)`. We go back to the sub-problem with the new value of $\bar{x}$.
+
+```{r, echo=FALSE}
+sub <- solve.subproblem(sub, x.bar)
+p <- get.variables(sub)
+opt <- get.objective(sub)
+nb.dual.vars <- length(get.constr.value(sub))
+y.bar <- get.dual.solution(sub)[2:(nb.dual.vars+1)]
+UB <- min(UB, sum(cost*x.bar) + sum(f*y.bar))
+```
+
+This time, the solution is an extreme point $p^2=($ `r format_dcml(p)` $).$ 
+The corresponding solution to the primal program is $\bar{y}=($ `r format_dcml(y.bar)` $)$.
+The solution $(\bar{x}, \bar{y})$ is feasible for the original problem, and provides an
+upper bound to the solution: $UB = c^T \bar{x} + f^T \bar{y} =$ `r format_dcml(UB)`.
+
+We find that $Q(\bar{x})=$ `r format_dcml(opt)` while $\bar{z}=$ `r format_dcml(z.bar)`. Therefore, $Q(\bar{x}) > \bar{z}$ and the RMP solution $(\bar{x}, \bar{z})$ violates the constraint
+
+$$
+(p^2)^T(d-B x) \leq z
+$$
+
+We have identified a optimality cut to add to the restricted master program, which becomes
+
+$$
+\begin{aligned}
+    \mbox{min} \ \ & c^T x + z  \\
+    \mbox{s.t.} & \\
+    & Ax = b \\
+    & (r^1)^T(d-Bx) \leq 0 \\
+    & (p^2)^T(d-Bx) \leq z \\
+    & x \geq 0
+  \end{aligned}
+$$
+
+
+```{r, echo=FALSE}
+rmp <- solve.rmp(rmp, p=p, r=NULL)
+sol <- get.variables(rmp)
+x.bar <- sol[1:length(cost)]   
+z.bar <- sol[length(sol)]
+opt <- get.objective(rmp)
+```
+
+The solution is $\bar{x} = ($ `r format_dcml(x.bar)` $).$ The objective value provides
+an undated lower bound to the solution: $LB =$ `r format_dcml(opt)`. The upper and lower bounds are now equal, the optimum to the original problem has been found.
+
+# Example 2
+
+An alternative to mean-variance portfolio optimization is to optimize a portfolio while only penalizing the downside risk. Consider for example the Lower Semi-Absolute Deviation (LSAD) risk measure, which only penalizes the shortfall below a mean or target return.
+
+We have a portfolio of $N$ assets and consider $M$ scenarios for the investment horizon. Let $r_{ij}$ be the return of asset $i$ under scenario $j$. Let $\tau^*$ be the target portfolio return, and we would like to minimize the expected shortfall below this target return.
+The scenarios have equal probabiities.
+
+The corresponding program can be stated as follows:
+
+
+$$
+\begin{aligned}
+    \mbox{min} \ \ & \sum_j z_j \\
+    \mbox{s.t.} & \\
+    & \sum_i x_i = 1 \\
+    & \sum_i r_{ij} x_i + z_j \geq \tau^* \ \ j=1, \ldots M\\
+    & x \geq 0
+  \end{aligned}
+$$
+We recognize the structure of the two-stage problem. Benders's algorithm is particularly adapted when the number of scenarios is large. Let's compare this formulation to the classical mean-variance model.
+
+Daily returns for 11 assets
+
+```{r, eval=TRUE, echo=TRUE, warning=FALSE}
+library(Rsymphony)
+library(Rglpk)
+
+daily.ret.file <- file.path(get.data.folder(), "daily.ret.rda")
+load(daily.ret.file)
+```
+
+We use monthly of data. The optimal weights are shown in Table \@ref(tab:lsad-solution).
+
+```{r, warning=FALSE, message=FALSE}
+monthly.ret <- period.apply(daily.ret, endpoints(daily.ret, "months"), mean)*30
+N <- ncol(monthly.ret)
+nb.obs <- nrow(monthly.ret)
+
+dat <- cbind(as.matrix(monthly.ret), matrix(1/nb.obs, nb.obs, 1))
+tau <- .03
+eps <- 1.e-5
+a0 <- rep(1, N)
+A.const <- rbind(a0, -a0)
+b.const <- c(1+eps, -1+eps)
+LB <- rep(0, N)
+UB <- rep(1, N)
+
+res <- BDportfolio_optim(dat, tau, "CVAR", .95, Aconst=A.const,
+                         bconst=b.const, LB=LB, UB=UB, maxiter=200, tol=eps)
+```
+
+
+```{r lsad-solution, echo=FALSE}
+kable(res$theta*100, "latex", booktabs=T, digits=1, 
+      col.names=c("weights (%)"),
+      caption="LSAD allocation") %>% 
+  kable_styling(latex_options="HOLD_position")
+```
