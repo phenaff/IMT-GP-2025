@@ -49,6 +49,8 @@ vignettes/*.pdf
 *.tex
 */*.log
 
+**/Figures
+
 # R Environment Variables
 .Renviron
 

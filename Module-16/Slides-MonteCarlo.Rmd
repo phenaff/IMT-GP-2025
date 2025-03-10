@@ -1,0 +1,116 @@
+---
+title: "Monte-Carlo"
+subtitle: "Pricing by Simulation"
+author: "P. Hénaff"
+date: "Version: `r format(Sys.Date(), '%d %b %Y')`"
+output:
+  beamer_presentation:
+    colortheme: dolphin
+    theme: Montpellier
+  slidy_presentation: default
+
+header-includes:
+  - \usepackage[utf8]{inputenc}
+  - \usepackage{graphicx}
+  - \usepackage{subfig}
+  - \usepackage{booktabs}
+  - \usepackage{longtable}
+  - \usepackage{array}
+  - \usepackage{multirow}
+  - \usepackage{wrapfig}
+  - \usepackage{float}
+  - \usepackage{colortbl}
+  - \usepackage{pdflscape}
+  - \usepackage{tabu}
+  - \usepackage{threeparttable}
+  - \usepackage{threeparttablex}
+  - \usepackage[normalem]{ulem}
+  - \usepackage{makecell}
+  - \usepackage{xcolor}
+
+
+bibliography: ../library.bib
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+def.chunk.hook  <- knitr::knit_hooks$get("chunk")
+knitr::knit_hooks$set(chunk = function(x, options) {
+  x <- def.chunk.hook(x, options)
+  ifelse(options$size != "normalsize", paste0("\n \\", options$size,"\n\n", x, "\n\n \\normalsize"), x)
+})
+```
+
+
+## Use of Monte-Carlo Simulations
+
+Simulations are used for:
+\begin{itemize}
+\item Risk measurement:
+\begin{itemize}
+\item Scenario analysis, VaR
+\item Stress testing (Basel II, Solvency II)
+\end{itemize}
+
+\item Derivatives pricing
+\begin{itemize}
+  \item Easy to implement (just code the 
+    payoff formula)
+    \item Flexible: it dissociates the dynamics of the risk factors from the evaluation of the option.
+\end{itemize}
+\end{itemize}
+
+
+## Monte-Carlo Simulations: Historical vs. Risk-Neutral
+
+\begin{itemize}
+\item Simulations for scenario analysis and VaR are based on
+actual probabilities (historical VaR)
+\item Simulations for pricing are based on risk-neutral probabilities.
+\item Economic scenarii generation for Solvency II calculations use hybrid methods. 
+\begin{itemize}
+\item Market consistent
+\item Use historical data when implied volatility from option market is not available
+\end{itemize}
+\end{itemize}
+
+
+## Simulating a Log-Normal Process
+
+Given a stock with expected continuous compounded return $\mu$:
+
+\[
+\ln(S_t) - \ln(S_0) \approx \mathcal{N}\left((\mu - \frac{1}{2} \sigma^2)t, \sigma^2 t\right)
+\] 
+
+or
+\[
+S_{t} = S_0 e^{x_t}
+\]
+
+with $x_t \approx \mathcal{N}\left((\mu - \frac{1}{2} \sigma^2)t, \sigma^2 t\right)$.
+
+\[
+x_t = (\mu - \frac{1}{2} \sigma^2)t + \sigma \sqrt{t} \epsilon
+\]
+
+with $\epsilon \approx \mathcal{N}(0,1)$.
+
+
+## How to simulate a log-normal process
+
+To simulate a time series of stock prices following a log-normal process, observed at intervals $\Delta t$:
+
+\begin{enumerate}
+\item Start with $S_0$ at $t=0$
+\item for $t=\Delta t, 2 \Delta t, \ldots, T$:
+\begin{enumerate}
+\item Simulate $\epsilon \approx \mathcal{N}(0,1): \epsilon_t$
+\item Compute 
+\[
+S_t = S_{t-\Delta t} e^{\left(r - \frac{\sigma^2}{2}\right) \Delta t + \sigma \sqrt{\Delta t} \epsilon_t}
+\]
+\end{enumerate}
+\end{enumerate}
+
+

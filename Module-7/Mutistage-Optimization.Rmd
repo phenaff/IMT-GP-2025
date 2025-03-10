@@ -22,6 +22,7 @@ header-includes:
   - \usepackage{tikz}
   - \usetikzlibrary{shapes}
   - \usetikzlibrary{external}
+  - \tikzexternalize
   - \usepgfplotslibrary{external}
   - \usepackage[ruled, vlined, linesnumbered]{algorithm2e}
 ---
@@ -37,6 +38,7 @@ header-includes:
   library(optiSolve)
   library(piqp)
   library(latex2exp)
+  options(tinytex.engine_args = '-shell-escape')
 ```
 
 Consider the problem of managing a portfolio of stocks and bonds in order to secure
@@ -196,13 +198,13 @@ for(i in seq(7)) {
 colnames(sol) <- c("Node", "Stock", "Bond")
 ```
 
-```{r, echo=FALSE}
+```{r opt-sol-1, echo=FALSE}
 kable(sol, caption="Optimal asset allocation at each node in the 3-period tree",
 booktabs=T, digits=0) %>%
 kable_styling(latex_options="hold_position")
 ```
 
-The excess or shortfall at horizon $T$ for each scenario is displayed in Table \@ref(tab:es).
+The excess or shortfall at horizon $T$ for each scenario is displayed in Table \@ref(tab:opt-sol-1).
 
 ```{r lp-2, echo=FALSE}
 wealth <- matrix(0, nrow=8, ncol=3)
@@ -217,7 +219,7 @@ booktabs = T, digits=0)
 
 ## Expected Value Solution
 
-In order to appreciate the contribution of the stochastic model, we may consider a deterministic model where the decision is based on the expected return. Since the expected return of the stock (1.155) is higher than the expected return of the bond (1.13), the entire budget will be allocated to the stock. Table \@ref(tab:ev) shows the outcome of the strategy for the 8 scenarios, compared to the result of the stochastic optimization.
+In order to appreciate the contribution of the stochastic model, we may consider a deterministic model where the decision is based on the expected return. Since the expected return of the stock (1.155) is higher than the expected return of the bond (1.13), the entire budget will be allocated to the stock. Table \@ref(tab:lp-4) shows the outcome of the strategy for the 8 scenarios, compared to the result of the stochastic optimization.
 
 ```{r lp-3, echo=FALSE}
 return.index <- permutations(2,3,c(0,1), repeats.allowed = T)
@@ -336,14 +338,14 @@ For the time being, we will take $\rho$ as fixed. The complete algorithm is ther
 \Input{$\rho$, tol, $k_{\mbox{max}}$}
 \Output{$x^*$}
 \BlankLine
-$k <- 0; \lambda_k <- 0$\;
+$k <- 0; \ \lambda_k <- 0$\;
 \While{$k<k_{\mbox{max}}$ and $t > tol$}{
-    $x_{k+1} \leftarrow  \underset{x}{\mathrm{argmin}} \phi_k(x)$\;
+    $x_{k+1} \leftarrow  \underset{x}{\mathrm{argmin}} \ \  \phi_k(x)$\;
     $\lambda_{k+1} \leftarrow \lambda_k - \rho g(x_{k+1})$\;
     $k \leftarrow k+1$\;
     $t_1  \leftarrow ||\lambda_{k+1} - \lambda_k||$\;
     $t_2 \leftarrow ||g(x_{k+1}||$\;
-    $t \leftarrow t_1 \mbox{and} t_2$\;
+    $t \leftarrow \max(t_1, t_2)$\;
     }
 \caption{Augmented Lagrangian algorithm}
 \end{algorithm}
@@ -373,7 +375,7 @@ The uncertainty regarding the second stage is modeled by $K$ scenarios, so that 
 $$
 \begin{aligned}
     \mbox{min} & \ \ \ f^1(x) + \sum_{k=1}^K (\pi_k f^2(x, y_k)) \\
-    \mbox{s.t.} & \ \ \ g^1(x_k) = 0 \ \ \forall k \\
+    \mbox{s.t.} & \ \ \ g^1(x) = 0  \\
     & \ \ \ g^2(x, y_k) = 0 \ \ \forall k
 \end{aligned}
 $$
@@ -383,7 +385,7 @@ or,
 $$
 \begin{aligned}
     \mbox{min} & \sum_{k=1}^K \pi_k (f^1(x_k) + f^2(x_k, y_k)) \\
-    \mbox{s.t.} & \ \ \ g^1(x) = 0 \\
+    \mbox{s.t.} & \ \ \ g^1(x_k) = 0 \\
     & \ \ \ g^2(x_k, y_k) = 0 \ \ \ \forall k \\
     & \ \ \ x_k - \hat{x} = 0 \ \ \ \forall k
 \end{aligned}
@@ -418,15 +420,15 @@ The progressive hedging algorithm is almost identical to the original augmented 
 \Input{$\rho$, tol, $i_{\mbox{max}}$}
 \Output{$x^*$}
 \BlankLine
-$i <- 0; \lambda_i <- 0; \mbox{converged} <- False$\;
-\While{$i<i_{\mbox{max}}$ and $! \mbox{converged}$}{
+$i \leftarrow 0;\  \lambda_i \leftarrow 0;\  \mbox{converged} \leftarrow False$\;
+\While{$i<i_{\mbox{max}}$ \mbox{and} $!\mbox{converged}$}{
     Solve the $K$ sub problems \ref{eq:subproblems} to obtain $x^{i+1}_k, k = 1, \ldots, K$\;
     Compute  $\hat{x}^{i+1} = \sum_{k=1}^K \pi_k x^{i+1}_k$\;
     Update the multipliers: $\lambda^{i+1}_k = \lambda^i_k + \rho(x^{i+1}_k - \hat{x}^{i+1})$\;
     $i \leftarrow i+1$\;
     $t_1  = ||\lambda^{i+1} - \lambda^i|| < \mbox{tol}_1$\;
-    $t_2 = ||g^1(x^{i+1}|| < \mbox{tol} < \mbox{tol}_2$\;
-    $t_3 = ||g^2(x^{i+1}|| < \mbox{tol} < \mbox{tol}_3$\;
+    $t_2 = ||g^1(x^{i+1}|| < \mbox{tol}_2$\;
+    $t_3 = ||g^2(x^{i+1}|| < \mbox{tol}_3$\;
     Convergence test:;
     $\mbox{converged} = t_1 \ \  \mbox{and} \ \ t_2 \ \ \mbox{and} \ \ t_3$\;
     }
@@ -463,6 +465,13 @@ $$
 The problem is readily solved to yield the optimal allocation in assets $A$ and $B$. Note however that the matrix in the quadratic term is not positive definite: the quadratic term only involves variables $y_1$ and $y_2$, while the problem has 4 variables in total. As a result, the solver must chosen with care. The PIQP solver handles problems of the form
 
 $$
+\begin{aligned}
+    \mbox{min} \ \ & \frac{1}{2} x^TPx + c^Tx \\
+    \mbox{s.t.} & \\
+    & Ax = b \\
+    & Gx \leq h \\
+    & lb \leq x \leq ub
+  \end{aligned}
 $$
 
 for real positive semi-definite matrices $P$. With variables arranged as $x_A, x_B, y_1, y_2$, the problem is set up as follows: 
@@ -621,29 +630,29 @@ r = 2
 x.iter <- matrix(0, nrow=iter.max, ncol=2)
 
 while(!conver & (iter.count < iter.max)) {
-iter.count <- iter.count + 1
-x.iter[iter.count,] = x.hat
-x[1,] <- sub.prob(x.hat, r, w[1,], q[1,])$x[1:2]
-x[2,] <- sub.prob(x.hat, r, w[2,], q[2,])$x[1:2]
-
-
-x.hat.old <- x.hat
-x.hat <- colMeans(x)
-w.old <- w
-w[1,] = w[1,] + r * (x[1,] - x.hat)
-w[2,] = w[2,] + r * (x[2,] - x.hat)
-
-# convergence test
-test.1 <- norm(x.hat-x.hat.old, type="2")
-test.2 <- norm(w - w.old, type="2")
-
-conver <- (test.1 <= tol) & (test.2 <= tol)
+  iter.count <- iter.count + 1
+  x.iter[iter.count,] = x.hat
+  x[1,] <- sub.prob(x.hat, r, w[1,], q[1,])$x[1:2]
+  x[2,] <- sub.prob(x.hat, r, w[2,], q[2,])$x[1:2]
+  
+  
+  x.hat.old <- x.hat
+  x.hat <- colMeans(x)
+  w.old <- w
+  w[1,] = w[1,] + r * (x[1,] - x.hat)
+  w[2,] = w[2,] + r * (x[2,] - x.hat)
+  
+  # convergence test
+  test.1 <- norm(x.hat-x.hat.old, type="2")
+  test.2 <- norm(w - w.old, type="2")
+  
+  conver <- (test.1 <= tol) & (test.2 <= tol)
 }
 ```
 
-The progress of the algorithm is illustrated by the following graph, where the solution is seen to converge towards the extensive form solution $x_A=2.5, x_B=7.5$.
+The progress of the algorithm is illustrated in Figuure \@ref(fig:ph-plot-1), where the solution is seen to converge towards the extensive form solution $x_A=2.5, x_B=7.5$.
 
-```{r prog-hedging-plot, echo=FALSE, fig.cap="Progressive Hedging Iterations", fig.align='left'}
+```{r ph-plot-1, echo=FALSE, fig.cap="Progressive Hedging Iterations", fig.align='left'}
 plot(seq(iter.count),x.iter[1:iter.count,1], ylim=c(2, 8), type="l", col="blue", xlab="Iterations",
      ylab=expression(X))
 lines(seq(iter.count), x.iter[1:iter.count,2], type="l", col="red")
@@ -689,8 +698,7 @@ $$
   \end{aligned}
 $$
 
-with:
-
+The subproblem solution is obtained with the following function.
 
 ```{r prog-hedging2-1}
 nb.vars = 8
@@ -865,7 +873,7 @@ conver <- (test.1 <= tol) & (test.2 <= tol)
 
 The progress of the algorithm is illustrated by the following graph, which shows a linear convergence towards the solution. Strategies for speeding up the convergence is a topic of active research.
 
-```{r PHA-plot-1, echo=FALSE, fig.cap="Progressive Hedging Iterations for the 3-stages asset allocation problem, showing the convergence of the first 4 variables.", fig.align='left'}
+```{r PHA-plot-1, echo=FALSE, cache=TRUE, fig.cap="Progressive Hedging Iterations for the 3-stages asset allocation problem, showing the convergence of the first 4 variables.", fig.align='left'}
 alpha <- 1:4
 plot(seq(iter.count),x.iter[1:iter.count,1], ylim=c(0, 70000), type="l", col=alpha[1], xlab="Iterations",
      ylab=expression(X))
