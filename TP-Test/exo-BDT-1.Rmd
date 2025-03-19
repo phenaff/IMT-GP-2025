@@ -1,0 +1,482 @@
+---
+title: "Finance Quantitative"
+subtitle: "TP 1: Courbe zéro-coupon et modèle de Black-Derman-Toy"
+author: Patrick Hénaff
+date: "Version: `r format(Sys.Date(), '%d %b %Y')`"
+output:
+  pdf_document:
+    keep_tex: false
+    fig_caption: yes
+    latex_engine: pdflatex
+    number_sections: true
+geometry: margin=1in
+
+header-includes:
+  - \usepackage[utf8]{inputenc}
+  - \usepackage{eurosym}
+  - \usepackage{tikz}
+  - \usetikzlibrary{matrix}
+  - \usepgflibrary{shapes.misc}
+  - \usetikzlibrary{arrows,shadows}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+```{r load-libraries, include=FALSE, echo=TRUE}
+library(kableExtra)
+library(nleqslv)
+library(stats)
+library(plotrix)
+library(lubridate)
+library(dplyr)
+library(timeDate) # For business day calculations
+library(bizdays)
+```
+
+Ce projet comporte trois parties:
+- Calcul d'une courbe zéro-coupon à partir d'un échantillon d'obligations
+- Construction d'un modèle de Black-Derman-Toy
+- Calcul du prix de quelques obligations comportant des clauses optionnelles
+
+
+# Calcul d'une courbe zéro-coupon
+
+On se propose d'estimer une courbe de taux zéro-coupon en utilisant le modèle de [@Swensson1994]. Ce modèle est utilisé par la Banque Centrale Européenne pour publier quotidiennement la courbe de taux des emprunts d'Etat de la zone Euro.
+
+Le taux zéro-coupon de maturité $T$ est donné par l'expression:
+
+\begin{align}
+z(t) = & \beta_0 + \beta_1 \frac{1-\exp{-t/\tau_1}}{t/\tau_1} \\
+       & + \beta_2 \left( \frac{1-\exp{-t/\tau_1}}{t/\tau_1} - \exp{-t/\tau_1} \right) \\
+       & + \beta_3 \left( \frac{1-\exp{-t/\tau_2}}{t/\tau_2} - \exp{-t/\tau_2} \right) 
+\end{align}
+
+Les données relatives aux obligations sont disponibles dans le fichier "prix_obligations.csv". Un extrait figure dans le tableau ci-dessous.
+Pour chaque titre on dispose de la date de maturité, du coupon en %, et du prix "pied de coupon" observé le 20 février 2025, pour 100 de nominal.
+
+Les étapes du calcul:
+
+- Pour chaque titre, calculer le prix "coupon plein", c'est à dire la valeur actualisée des flux futurs. On rappelle que le prix "coupon plein" est le égal au prix "pied de coupon" plus le coupon couru. Utiliser la convention ACT/ACT pour le décompte des jours.
+
+```{r, echo=F}
+df.o <- read.csv("prix_obligations.csv", stringsAsFactors = FALSE)
+df.o$dt.maturity <- as.Date(df.o$dt.maturity, format="%Y-%m-%d")
+head(df.o)
+```
+
+```{r, echo=F}
+date_obs <- as.Date("2025-02-20")
+calcul_prix_coupon_plein <- function(prix_pied_coupon, coupon_annuel, date_maturite, frequence = 1) {
+  dernier_paiement <- as.Date(paste0(as.numeric(format(date_obs, "%Y")) - 1, "-02-20"))
+  jours_ecoules <- as.numeric(date_obs - dernier_paiement)
+  jours_total <- as.numeric(date_maturite - dernier_paiement)
+  coupon_couru <- coupon_annuel * (jours_ecoules / jours_total)
+  prix_coupon_plein <- prix_pied_coupon + coupon_couru
+  return(prix_coupon_plein)
+}
+
+df.o$Prix_Coupon_Plein <- mapply(calcul_prix_coupon_plein, 
+                                 df.o$price,  
+                                 df.o$coupon,  
+                                 df.o$dt.maturity)
+head(df.o)
+
+```
+
+
+- Ecrire une fonction qui calcule l'échéancier des paiements futurs de chaque obligation. Pour déterminer la date de chaque paiement, on utilisera la règle "Modified Following", en ne prenant en compte que les fins de semaines. On ne prend pas en compte des jours fériés.
+
+```{r, echo=F}
+library(lubridate)
+
+modified_following <- function(date) {
+  if (wday(date) == 7) {  # Samedi
+    date <- date + days(2)
+  } else if (wday(date) == 1) {  # Dimanche
+    date <- date + days(1)
+  }
+  return(date)
+}
+
+calcul_echeancier <- function(date_emission, date_maturite, coupon_annuel, frequence = 1) {
+  # Calcul du nombre de paiements
+  periodes <- seq(from = date_emission, to = date_maturite, by = paste0(12 / frequence, " months"))
+  
+  dates_paiement <- sapply(periodes, modified_following)
+  
+  echeancier <- data.frame(
+    Date_Paiement = as.Date(dates_paiement, origin = "1970-01-01"),
+    Coupon = rep(coupon_annuel / frequence, length(dates_paiement))
+  )
+  
+  return(echeancier)
+}
+
+date_emission <- as.Date("2023-09-07")  # Date d'émission
+date_maturite <- as.Date("2027-09-07")  # Date de maturité
+coupon_annuel <- 4.8  # Coupon en %
+frequence <- 2  # Paiements semestriels
+
+echeancier <- calcul_echeancier(date_emission, date_maturite, coupon_annuel, frequence)
+print(echeancier)
+
+```
+
+- Ecrire une fonction qui calcule la valeur actualisée de chaque obligation en fonction des paramètres du modèle de Swensson. Le modèle de Swensson donne un taux continu.
+
+```{r, echo=F}
+modele_swensson <- function(beta_0, beta_1, beta_2, beta_3, tau_1, tau_2, dates_maturite) {
+  # Date d'observation (fixée à une valeur donnée)
+  date_obs <- as.Date("2023-09-07")
+  
+  # Calcul de la différence en jours entre la date d'observation et les dates de maturité
+  t <- as.numeric(difftime(dates_maturite, date_obs, units = "days")) / 365.25  # Convertir en années
+  
+  # Calcul du taux zéro-coupon avec le modèle de Swensson
+  taux_zc <- beta_0 + beta_1 * (1 - exp(-t / tau_1)) / (t / tau_1) + 
+             beta_2 * ((1 - exp(-t / tau_1)) / (t / tau_1) - exp(-t / tau_1)) +
+             beta_3 * ((1 - exp(-t / tau_2)) / (t / tau_2) - exp(-t / tau_2))
+  
+  return(taux_zc)
+}
+
+prix_obligation <- function(coupon_annuel, dt_maturite, date_emission, taux_zc) {
+  # Calcul de l'échéancier
+  echeancier <- calcul_echeancier(date_emission, dt_maturite, coupon_annuel)
+  
+  # Calcul des prix des obligations
+  prix_obligation <- sum(echeancier$Coupon / exp(taux_zc))  # Utilisation de taux_zc directement pour les paiements
+  
+  return(prix_obligation)
+}
+
+erreur_calibration <- function(params, df_o, date_emission) {
+  # Extraction des paramètres
+  beta_0 <- params[1]
+  beta_1 <- params[2]
+  beta_2 <- params[3]
+  beta_3 <- params[4]
+  tau_1 <- params[5]
+  tau_2 <- params[6]
+  
+  # Calcul des taux zéro-coupon à partir du modèle
+  taux_zc <- modele_swensson(beta_0, beta_1, beta_2, beta_3, tau_1, tau_2, df_o$dt.maturity)
+  
+  # Calcul des prix des obligations
+  prix_calcules <- sapply(1:nrow(df_o), function(i) {
+    prix <- prix_obligation(df_o$coupon[i], df_o$dt.maturity[i], date_emission, taux_zc)
+    if (is.na(prix) || is.infinite(prix)) {
+      return(NA)  # Retourner NA si le prix est invalide
+    }
+    return(prix)
+  })
+  
+  # Calcul de l'erreur (ici, nous utilisons l'écart absolu entre les prix observés et calculés)
+  erreur <- sum((df_o$price - prix_calcules)^2, na.rm = TRUE)
+  
+  # Retourner l'erreur pour l'optimisation
+  return(erreur)
+}
+
+# Test de la fonction erreur_calibration avec les paramètres initiaux
+erreur_calibration(c(0.02, 0.03, 0.01, 0.01, 1, 5), df.o, as.Date("2023-09-07"))
+
+params_initiaux <- c(beta_0 = 0.02, beta_1 = 0.03, beta_2 = 0.01, beta_3 = 0.01, tau_1 = 1, tau_2 = 5)
+
+resultats <- optim(params_initiaux, erreur_calibration, df_o = df.o, date_emission = as.Date("2023-09-07"),
+                   method = "L-BFGS-B", lower = c(0, 0, 0, 0, 0.5, 2), upper = c(0.1, 0.1, 0.1, 0.1, 5, 20))
+
+resultats$par
+
+```
+
+- Finalement, déterminer les 6 paramètres du modèle par minimisation de l'erreur globale de valorisation. Comme les obligations de l'échantillon ont des maturité très différentes, on pourra normaliser l'erreur sur chaque titre par la duration du titre. 
+
+Pour présenter les résultats, on pourra reporter sur un graphe les prix (ou les rendements) calculés et les prix (ou les rendements) observés des obligations.
+
+
+```{r, echo=F}
+# Créer un data.frame avec les informations des obligations
+df_o <- data.frame(
+  dt.maturity = as.Date(c("2025-07-14", "2025-08-05", "2026-09-02", "2026-04-27", "2027-03-22", 
+                          "2027-09-07", "2028-03-14", "2028-12-27", "2030-03-19", "2031-05-05")),
+  coupon = c(4.6, 1.5, 3.7, 3.4, 1.4, 4.8, 5, 2.6, 1.7, 3.9),
+  price = c(100.894, 99.616, 102.400, 101.399, 98.802, 106.609, 108.310, 101.826, 97.247, 109.524)
+)
+
+params_optimes <- c(0.02, 0.03, 0.01, 0.01, 1, 5) 
+
+prix_calcules <- sapply(1:nrow(df_o), function(i) {
+  taux_zc <- modele_swensson(params_optimes[1], params_optimes[2], params_optimes[3], 
+                             params_optimes[4], params_optimes[5], params_optimes[6], df_o$dt.maturity[i])
+  prix <- prix_obligation(df_o$coupon[i], df_o$dt.maturity[i], as.Date("2023-09-07"), taux_zc)
+  return(prix)
+})
+
+# Ajouter les prix calculés au data.frame
+df_o$Prix_calcules <- prix_calcules
+
+# Tracer un graphique comparatif des prix observés vs prix calculés
+library(ggplot2)
+
+ggplot(df_o, aes(x = dt.maturity)) +
+  geom_line(aes(y = price, color = "Observé")) +
+  geom_line(aes(y = Prix_calcules, color = "Calculé")) +
+  geom_point(aes(y = price, color = "Observé")) +
+  geom_point(aes(y = Prix_calcules, color = "Calculé")) +
+  labs(title = "Prix Observés vs Prix Calculés des Obligations",
+       x = "Date de Maturité",
+       y = "Prix des Obligations") +
+  scale_color_manual(values = c("Observé" = "blue", "Calculé" = "red")) +
+  theme_minimal()
+```
+
+# Le modèle de Black-Derman-Toy
+
+On considère le modèle de Black, Derman et Toy décrit dans la note de cours.
+
+La courbe de volatilité (en %) du taux zéro-coupon est donnée par la fonction
+
+```{r vol-curve-def, echo=TRUE}
+library(splines)
+vol.curve <- splinefun(c(0,5,10,20), c(1, 0.8, 0.6, 0.4)/5)
+```
+
+Les étapes du calcul:
+
+1. Calibrage de l'arbre: généraliser la méthode de calibration vue en cours pour pouvoir construire un arbre de $n$ pas, et d'incrément $\Delta t$.
+
+```{r vol-curve-def, echo=TRUE}
+build_bdt_tree <- function(r0, vol.curve, n, delta_t) {
+  # Initialisation de l'arbre des taux courts
+  tree <- matrix(NA, nrow = n + 1, ncol = n + 1)
+  tree[1, 1] <- r0  # Taux initial
+
+  # Remplissage de l’arbre en utilisant la volatilité
+  for (i in 2:(n + 1)) {
+    vol_t <- vol.curve((i - 1) * delta_t)  # Volatilité au temps t
+    for (j in 1:i) {
+      tree[j, i] <- tree[1, i - 1] * exp((2 * (j - 1) - (i - 1)) * vol_t * sqrt(delta_t))
+    }
+  }
+  return(tree)
+}
+
+# Paramètres du modèle
+n <- 5 * 12  # 5 ans avec pas mensuel (12 mois par an)
+delta_t <- 1 / 12  # Incrément mensuel
+r0 <- 0.05  # Taux initial = 5%
+
+bdt_tree <- build_bdt_tree(r0, vol.curve, n, delta_t)
+print(bdt_tree)
+```
+
+2. A partir de l'article de Boyle (2000), utiliser les prix d'Arrow-Debreu pour optimiser les calculs. 
+
+```{r vol-curve-def, echo=TRUE}
+compute_arrow_debreu <- function(bdt_tree, delta_t) {
+  n <- ncol(bdt_tree)
+  arrow_prices <- matrix(0, nrow = n, ncol = n)
+
+  # Condition terminale : 1 pour chaque état final
+  arrow_prices[, n] <- 1
+
+  # Backward induction
+  for (i in (n - 1):1) {
+    for (j in 1:i) {
+      arrow_prices[j, i] <- 0.5 * (arrow_prices[j, i + 1] + arrow_prices[j + 1, i + 1]) / exp(bdt_tree[j, i] * delta_t)
+    }
+  }
+  return(arrow_prices)
+}
+
+arrow_prices <- compute_arrow_debreu(bdt_tree, delta_t)
+print(arrow_prices)
+```
+3. Construire un arbre de maturité 5 ans, par pas de temps de 1 mois. 
+```{r vol-curve-def, echo=TRUE}
+print(bdt_tree[1:10, 1:10])
+```
+4. Vérifier la conformité de l'arbre en valorisant une obligation zéro coupon et une obligation à coupon fixe dans l'arbre. Vous devez reproduire exactement les prix obtenus par actualisation des flux avec les taux zéro-coupon.
+
+``` {r vol-curve-def, echo=TRUE}
+price_zero_coupon <- function(bdt_tree, arrow_prices, delta_t, maturite) {
+  n <- ncol(bdt_tree)
+  prix <- matrix(0, nrow = n, ncol = n)
+  
+  # Condition terminale : remboursement à 100€
+  prix[, maturite] <- 100
+  
+  # Backward induction
+  for (i in (maturite - 1):1) {
+    for (j in 1:i) {
+      prix[j, i] <- (0.5 * (prix[j, i + 1] + prix[j + 1, i + 1])) / exp(bdt_tree[j, i] * delta_t)
+    }
+  }
+  return(prix[1, 1])  # Prix initial
+}
+
+prix_zero <- price_zero_coupon(bdt_tree, arrow_prices, delta_t, 5 * 12)
+print(paste("Prix de l'obligation zéro-coupon :", prix_zero))
+```
+
+
+```
+price_zero_coupon <- function(bdt_tree, arrow_prices, delta_t, maturite) {
+  n <- ncol(bdt_tree)
+  prix <- matrix(0, nrow = n, ncol = n)
+  
+  # Condition terminale : remboursement à 100€
+  prix[, maturite] <- 100
+  
+  # Sauvegarder les prix à chaque période
+  prix_zero_courbe <- numeric(maturite)  # Vecteur pour la courbe zéro-coupon
+  
+  # Backward induction
+  for (i in (maturite - 1):1) {
+    for (j in 1:i) {
+      prix[j, i] <- (0.5 * (prix[j, i + 1] + prix[j + 1, i + 1])) / exp(bdt_tree[j, i] * delta_t)
+    }
+    # Sauvegarder le prix de l'obligation à la période i
+    prix_zero_courbe[i] <- prix[1, i]
+  }
+  
+  # Enlever la dernière valeur de la courbe avant d'afficher
+  prix_zero_courbe <- prix_zero_courbe[-length(prix_zero_courbe)]
+  
+  # Afficher la courbe des prix zéro-coupon
+  plot(1:(maturite - 1), prix_zero_courbe, type = "l", col = "blue", xlab = "Période", ylab = "Prix Zero-Coupon", 
+       main = "Courbe Zero-Coupon")
+  
+  return(prix[1, 1])  # Retourner le prix initial
+}
+
+# Paramètres pour l'appel
+prix_zero <- price_zero_coupon(bdt_tree, arrow_prices, delta_t, 5 * 12)
+print(paste("Prix de l'obligation zéro-coupon :", prix_zero))
+```
+
+```{r vol-curve-def, echo=TRUE}
+price_coupon_bond <- function(bdt_tree, arrow_prices, delta_t, maturite, coupon, nominal) {
+  n <- ncol(bdt_tree)
+  prix <- matrix(0, nrow = n, ncol = n)
+  
+  # Condition terminale : paiement du nominal + dernier coupon
+  prix[, maturite] <- nominal + coupon
+
+  # Backward induction
+  for (i in (maturite - 1):1) {
+    for (j in 1:i) {
+      prix[j, i] <- (coupon + 0.5 * (prix[j, i + 1] + prix[j + 1, i + 1])) / exp(bdt_tree[j, i] * delta_t)
+    }
+  }
+  return(prix[1, 1])
+}
+
+# Test avec une obligation à coupon de 3% et nominal de 100€
+prix_coupon <- price_coupon_bond(bdt_tree, arrow_prices, delta_t, 5 * 12, 3, 100)
+print(paste("Prix de l'obligation à coupon :", prix_coupon))
+```
+# Option d’achat sur une obligation zéro-coupon
+
+Calculer le prix d'une option d'achat de maturité 1 an, de strike 91, sur une obligation zéro-coupon de maturité 5 ans.
+
+```{r vol-curve-def, echo=TRUE}
+price_european_call <- function(bdt_tree, arrow_prices, delta_t, maturite_obligation, maturite_option, strike) {
+  n <- ncol(bdt_tree)  # Taille de l'arbre
+
+  if (maturite_option > n) {
+    stop("Erreur: maturité de l'option dépasse la taille de l'arbre")
+  }
+  if (maturite_obligation > n) {
+    stop("Erreur: maturité de l'obligation dépasse la taille de l'arbre")
+  }
+
+  # 1. Calcul du prix de l'obligation zéro-coupon
+  prix_obligation <- price_zero_coupon(bdt_tree, arrow_prices, delta_t, maturite_obligation)
+
+  # 2. Initialisation de l'arbre des valeurs de l'option
+  option_tree <- matrix(0, nrow = n, ncol = n)
+
+  # Condition terminale à la maturité de l'option (payoff max(P - K, 0))
+  for (j in 1:maturite_option) {  
+    option_tree[j, maturite_option] <- max(prix_obligation - strike, 0)  # `prix_obligation` est un scalaire
+  }
+
+  # Backward induction pour valoriser l'option
+  for (i in (maturite_option - 1):1) {
+    for (j in 1:i) {
+      option_tree[j, i] <- 0.5 * (option_tree[j, i + 1] + option_tree[j + 1, i + 1]) / exp(bdt_tree[j, i] * delta_t)
+    }
+  }
+
+  return(option_tree[1, 1])  # Retourne le prix initial de l’option
+}
+
+
+# Test pour l'option sur l'obligation zéro-coupon
+prix_option_zero_coupon <- price_european_call(bdt_tree, arrow_prices, delta_t, 5 * 12, 12, 91)
+print(paste("Prix de l'option sur l'obligation zéro-coupon :", prix_option_zero_coupon))
+```
+
+
+
+## Options sur obligation
+
+On considère maintenant une obligation de maturité 9 ans versant un coupon annuel de 3%, et une option d'achat de strike 100 et de maturité 1 an sur cette obligation.
+
+```{r vol-curve-def, echo=TRUE}
+# Paramètres de l'arbre BDT
+r0 <- 0.03  # Taux initial
+n_periods <- 9 * 12  # 9 ans, soit 108 périodes (12 périodes par an)
+delta_t <- 1 / 12  # Intervalle temporel (mensuel)
+
+# Supposons que vol.curve est une fonction qui renvoie la volatilité pour chaque période (exemple ici)
+vol.curve <- function(t) {
+  return(0.2)  # Volatilité constante de 20% (exemple)
+}
+
+# Générer l'arbre BDT avec les paramètres
+bdt_tree <- build_bdt_tree(r0, vol.curve, n_periods, delta_t)
+
+
+# Paramètres de l'obligation coupon
+coupon_rate <- 3  # Taux du coupon de l'obligation (3%)
+nominal_value <- 100  # Valeur nominale de l'obligation
+strike_price <- 100  # Strike de l'option
+maturite_obligation <- 9 * 12  # 9 ans, soit 108 périodes
+maturite_option <- 12  # Maturité de l'option (1 an, soit 12 périodes)
+
+# Calcul du prix de l'option sur l'obligation coupon
+prix_option_coupon <- price_european_call_coupon(bdt_tree, arrow_prices, delta_t, maturite_obligation, maturite_option, strike_price)
+
+# Affichage du résultat
+print(paste("Prix de l'option sur l'obligation à coupon :", prix_option_coupon))
+
+
+```
+
+## Obligation avec option de remboursement anticipé
+
+Les obligations avec option de remboursement anticipé ("callable bonds") sont émises de façon régulière. Elles donnent l'opportunité, pour l'émetteur, de pouvoir se refinancer à meilleur compte en cas de baisse des taux.
+
+On considère une obligation de maturité 10 ans, remboursable au pair à la date aniversaire de l'émission, c'est à dire une fois par an, et ce à partir du 5ème aniversaire. Il y aura donc 5 opportunité de remboursement anticipé.
+
+On se propose de valoriser une telle obligation dans le modèle de Black-Derman-Toy afin de mesurer la valeur de cette option de remboursement anticipé.
+
+Pour ce faire, on va calculer la valeur actualisée de l'obligation par récursion inverse dans l'arbre.
+A chaque date anniversaire où l'option de remboursement peut être exercée, on devra comparer la valeur actualisée de l'obligation à la valeur de remboursement immédiat, et effectuer le choix optimal du point de vue de l'émetteur.
+
+Les détails de l'obligation sont les suivants:
+
+- date de maturité: 23 février 2035
+
+- coupon annuel: 3%
+
+Les obligations sont en grande majorité émises au pair. Quel doit être le taux de coupon pour que ces obligations (avec ou sans clause de remboursement anticipé) puissent être émises au pair?
+
+
+
+
