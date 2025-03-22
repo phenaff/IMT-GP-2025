@@ -1,0 +1,777 @@
+---
+title: "Finance Quantitative"
+subtitle: "TP 1: Courbe zéro-coupon et modèle de Black-Derman-Toy"
+author: Patrick Hénaff
+date: "Version: `r format(Sys.Date(), '%d %b %Y')`"
+output:
+  bookdown::pdf_document2:
+    keep_tex: false
+    fig_caption: yes
+    latex_engine: pdflatex
+    number_sections: true
+geometry: margin=1in
+
+header-includes:
+  - \usepackage[utf8]{inputenc}
+  - \usepackage{eurosym}
+  - \usepackage{tikz}
+  - \usetikzlibrary{matrix}
+  - \usepgflibrary{shapes.misc}
+  - \usetikzlibrary{arrows,shadows}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+```{r load-libraries, include=FALSE, echo=TRUE}
+library(kableExtra)
+library(nleqslv)
+library(stats)
+library(plotrix)
+library(lubridate)
+library(dplyr)
+library(timeDate) # For business day calculations
+library(bizdays)
+library(BondValuation)
+library(ggplot2)
+```
+
+Ce projet comporte trois parties:
+- Calcul d'une courbe zéro-coupon à partir d'un échantillon d'obligations
+- Construction d'un modèle de Black-Derman-Toy
+- Calcul du prix de quelques obligations comportant des clauses optionnelles
+
+
+# Calcul d'une courbe zéro-coupon
+
+On se propose d'estimer une courbe de taux zéro-coupon en utilisant le modèle de [@Swensson1994]. Ce modèle est utilisé par la Banque Centrale Européenne pour publier quotidiennement la courbe de taux des emprunts d'Etat de la zone Euro.
+
+Le taux zéro-coupon de maturité $T$ est donné par l'expression:
+
+\begin{align}
+z(t) = & \beta_0 + \beta_1 \frac{1-\exp{-t/\tau_1}}{t/\tau_1} \\
+       & + \beta_2 \left( \frac{1-\exp{-t/\tau_1}}{t/\tau_1} - \exp{-t/\tau_1} \right) \\
+       & + \beta_3 \left( \frac{1-\exp{-t/\tau_2}}{t/\tau_2} - \exp{-t/\tau_2} \right) 
+\end{align}
+
+Les données relatives aux obligations sont disponibles dans le fichier "prix_obligations.csv". Un extrait figure dans le tableau ci-dessous.
+Pour chaque titre on dispose de la date de maturité, du coupon en %, et du prix "pied de coupon" observé le 20 février 2025, pour 100 de nominal.
+
+Les étapes du calcul:
+
+- Pour chaque titre, calculer le prix "coupon plein", c'est à dire la valeur actualisée des flux futurs. On rappelle que le prix "coupon plein" est le égal au prix "pied de coupon" plus le coupon couru. Utiliser la convention ACT/ACT pour le décompte des jours.
+
+- Ecrire une fonction qui calcule l'échéancier des paiements futurs de chaque obligation. Pour déterminer la date de chaque paiement, on utilisera la règle "Modified Following", en ne prenant en compte que les fins de semaines. On ne prend pas en compte des jours fériés.
+
+- Ecrire une fonction qui calcule la valeur actualisée de chaque obligation en fonction des paramètres du modèle de Swensson. Le modèle de Swensson donne un taux continu.
+
+- Finalement, déterminer les 6 paramètres du modèle par minimisation de l'erreur globale de valorisation. Comme les obligations de l'échantillon ont des maturité très différentes, on pourra normaliser l'erreur sur chaque titre par la duration du titre. 
+
+Pour présenter les résultats, on pourra reporter sur un graphe les prix (ou les rendements) calculés et les prix (ou les rendements) observés des obligations.
+
+
+```{r, echo=F}
+df.o <- read.csv("prix_obligations.csv",
+                           colClasses=c("character", "character", NA))
+df.o$dt.maturity <- as.Date(df.o$dt.maturity, format("%Y-%m-%d"))
+df.o$Nom <- sapply(seq_along(df.o$dt.maturity), function(x) paste('Bond-',x, sep=''))
+nb.bonds <- nrow(df.o)
+kable(df.o[1:10,],
+      col.names=c("Dt Maturité", "Coupon (%)", "Prix", "Id"),
+      format="latex", booktabs=T)%>%
+  kable_styling(position="center")
+```
+
+## Solution {-}
+
+La règle "modified following" est appliquée pour s'assurer que les dates de paiement tombent un jour ouvré:
+
+- Si la date de paiement tombe un jour non-ouvré, avancer au prochain jour ouvré
+
+- Si la règle précédente fait changer de mois, reculer au jour oublié précédent la date de paiement.
+
+```{r modified-following, echo=TRUE}
+# adjust to next business days - modified following rule ignoring holidays
+adjust_mf <- function(date) {
+    adjusted.date <- date
+    if (!is.bizday(adjusted.date, cal="weekends")) {
+      adjusted.date <- add.bizdays(adjusted.date, 1, cal="weekends")
+      if (month(adjusted.date) != month(date)) {
+        # modified following rule: do not move to next month
+        adjusted.date <- add.bizdays(adjusted.date, -1, cal="weekends")
+      } 
+    }
+    adjusted.date
+}
+```
+
+On utilise cette fonction pour calculer l'échéancier d'une obligation:
+
+```{r cf-schedule, echo=TRUE}
+generate_bond_cashflows <- function(pricing_date, maturity_date, coupon_rate) {
+  # Input validation
+  if (!is.Date(pricing_date) || !is.Date(maturity_date)) {
+    stop("Pricing date and maturity date must be Date objects.")
+  }
+  if (maturity_date <= pricing_date) {
+    stop("Maturity date must be after the pricing date.")
+  }
+  if (!is.numeric(coupon_rate) || coupon_rate < 0) {
+    stop("Coupon rate must be a non-negative number.")
+  }
+
+  # Extract day and month of maturity date
+  maturity_day <- day(maturity_date)
+  maturity_month <- month(maturity_date)
+  
+  # previous coupon date, used for computing accrued interest
+  dt <- ymd(paste(year(pricing_date),maturity_month, maturity_day, sep="-"))
+  dt <- adjust_mf(dt)
+  if(dt >= pricing_date) {
+    dt <- ymd(paste(year(pricing_date)-1,maturity_month, maturity_day, sep="-"))
+    dt <- adjust_mf(dt)
+  }
+  previous_coupon_date <- dt
+  
+  # Generate coupon years
+  coupon_years <- seq(year(pricing_date), year(maturity_date), by = 1)
+  
+  # Create coupon dates using the extracted day and month
+  coupon_dates <- ymd(paste(coupon_years, maturity_month, maturity_day, sep = "-"))
+  
+  # Remove coupon dates before the pricing date
+  coupon_dates <- coupon_dates[coupon_dates >= pricing_date]
+  
+  # Adjust for week-ends ("modified following") - Ignore holidays for simplicity
+  adjusted_coupon_dates <- sapply(coupon_dates, adjust_mf)
+  adjusted_coupon_dates <- as.Date(adjusted_coupon_dates, origin = "1970-01-01")
+  
+  cash_flow_amounts <- rep(coupon_rate, length(adjusted_coupon_dates))
+  cash_flow_amounts[length(cash_flow_amounts)] <- cash_flow_amounts[length(cash_flow_amounts)] + 100
+  
+  cash_flows_df <- data.frame(
+    date = adjusted_coupon_dates,
+    amount = cash_flow_amounts
+  )
+  list(cf=cash_flows_df, dt_previous_coupon=previous_coupon_date)
+}
+```
+
+La fonction suivante calcule le taux zéro-coupon, fonction de la maturité.
+
+```{r zc-calc}
+zc.Swensson <- function(params, maturity) {
+  t1.0 <- exp(- maturity / params$tau1)
+  t1.1 <- (1-t1.0)/(maturity / params$tau1)
+  
+  t2.0 <- exp(- maturity / params$tau2)
+  t2.1 <- (1-t2.0)/(maturity / params$tau2)
+
+  zc = params$beta0 + params$beta1 * t1.1 + params$beta2 * (t1.1 - t1.0) + 
+    params$beta3 * (t2.1 - t2.0)  
+  zc
+}
+```
+
+Pour calculer la valeur actualisée d'une obligation, on actualise chaque flux au taux zéro-coupon correspondant:
+
+```{r bond-calc, echo=TRUE}
+dt.pricing <- ymd(20250217)
+
+bond.calc <- function(params, cashflows, calc.duration=FALSE) {
+  # maturity in fraction of year
+  ttm <- as.numeric(difftime(cashflows$date, dt.pricing)) / 365.25
+  zc <- zc.Swensson(params, ttm)/100
+  discount.factor <- exp(-zc*ttm)
+  pv <- discount.factor * cashflows$amount
+  res <- list(pv=sum(pv))
+  if(calc.duration) {
+    res$duration <- sum(ttm*pv) / res$pv
+  }
+  res
+}
+```
+
+Dans la fonction objectif, on normalise l'écart de prix par la duration.
+
+```{r objective, echo=TRUE}
+loss.function <- function(p, portfolio) {
+  loss <- 0
+  params <- list(beta0=p[1], beta1=p[2], beta2=p[3], 
+                 beta3=p[4], tau1=p[5], tau2=p[6])
+  for(bond.data in portfolio) {
+    res <- bond.calc(params, bond.data$cf, calc.duration = TRUE)
+    er <- (res$pv - bond.data$pv) / res$duration
+    loss <- loss + er^2
+  }
+  loss
+}
+```
+
+Finalement, on réalise la calibration du modèle.
+
+```{r swensson-calibration}
+# construction of bond data set
+df.bonds <- read.csv("prix_obligations.csv", stringsAsFactors = FALSE)
+df.bonds$dt.maturity <- as.Date(df.bonds$dt.maturity)
+
+nb.rows <- nrow(df.bonds)
+dt.pricing <- ymd(20250217)
+
+portfolio <- vector("list", nb.rows)
+for(i in seq(nb.rows)) {
+  tmp <- generate_bond_cashflows(dt.pricing, 
+                                 df.bonds$dt.maturity[i], 
+                                 df.bonds$coupon[i])
+  delta.1 <- as.numeric(difftime(tmp$dt_previous_coupon, tmp$cf$date[1]))
+  delta.2 <- as.numeric(difftime(tmp$dt_previous_coupon, dt.pricing))
+  ac <- df.bonds$coupon[i] * delta.2 / delta.1
+  pv = df.bonds$price[i] + ac
+  portfolio[[i]] <- list(cf=tmp$cf, pv=pv, ac=ac)
+}
+
+params.init <- list(beta0=1., beta1=1, beta2=-0.1, beta3=3, tau1=1, tau2=1)
+res.optim <- optim(unlist(params.init), loss.function, NULL, portfolio)
+params.optim <- as.list(setNames(res.optim$par, names(params.init)))
+
+zc.curve <- function(t) {
+  zc.Swensson(params.optim, t)
+}
+
+df <- function(t) {
+  exp(-zc.curve(t)*t/100)
+}
+```
+
+Le tableau \@ref(tab:swensson) donne les valeurs optimales des paramètres.
+
+```{r swensson, echo=FALSE}
+df.params <- as.data.frame(params.optim)
+names(df.params) <- c("$\\beta_0$", "$\\beta_1$", "$\\beta_2$", "$\\beta_3$", "$\\tau_1$", "$\\tau_2$")
+kable(df.params, digits = 2, format="latex", booktabs=T, escape=F, caption="Swensson parameters fitted to AAA bond prices") %>% kable_styling(latex_options="HOLD_position")
+```
+
+A titre de vérification, on compare, pour chaque obligation, le taux actuariel de 
+marché au taux calculé à partir de la courbe zéro-coupon.
+
+```{r verif-zc, echo=FALSE}
+df.verif <- data.frame(rdt.market=rep(0, nb.rows),
+                       rdt.zc=rep(0, nb.rows),
+                       dt.mat=df.bonds$dt.maturity)
+
+for(i in seq(nb.rows)) {
+  # rendement avec prix de marché
+  dt.em <- df.bonds$dt.maturity[i]
+  year(dt.em) <- year(dt.pricing) - 1
+  df.verif$rdt.market[i] <- BondVal.Yield(CP=df.bonds$price[i],
+                       SETT=dt.pricing, 
+                       Em=dt.em,
+                       Mat=df.bonds$dt.maturity[i], 
+                       Coup=df.bonds$coupon[i],
+                       CpY=1,
+                       DCC=3)$ytm.p.a
+  
+  res <- bond.calc(params.optim, portfolio[[i]]$cf, calc.duration = TRUE)
+  clean.price <- res$pv - portfolio[[i]]$ac
+  df.verif$rdt.zc[i] <- BondVal.Yield(CP=clean.price,
+                       SETT=dt.pricing, 
+                       Em=dt.em,
+                       Mat=df.bonds$dt.maturity[i], 
+                       Coup=df.bonds$coupon[i],
+                       CpY=1,
+                       DCC=3)$ytm.p.a
+}
+```
+```{r, echo=FALSE}
+p <- ggplot(df.verif, aes(x = dt.mat)) +
+  geom_point(aes(y = rdt.market, color = "Rendement Marché")) +
+  geom_point(aes(y = rdt.zc, color = "Rendement ZC")) +
+  scale_x_date(date_breaks = "3 year", date_labels = "%b %Y") + 
+  labs(
+    title = "Rendement de marché et rendement calculé à partir de la courbe ZC",
+    x = "Maturité",
+    y = "Rendement actuariel",
+    color = "Legend"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) # Rotate x-axis labels for better readability
+print(p)
+```
+
+# Le modèle de Black-Derman-Toy
+
+On considère le modèle de Black, Derman et Toy décrit dans la note de cours.
+
+La courbe de volatilité (en %) du taux zéro-coupon est donnée par la fonction
+
+```{r vol-curve-def, echo=TRUE}
+vol.curve <- splinefun(c(0,5,10,20), c(1, 0.8, 0.6, 0.4)/5)
+```
+
+La figure \@ref(fig:curves) présente sur le même graphique la courbe zéro-coupon et la courbe de volatilité.
+
+```{r curves, echo=FALSE, fig.cap="Courbe zéro-coupon et courbe de volatilité"}
+t <- seq(0,5,.1)
+zc.int <- zc.curve(t)
+vol.int <- vol.curve(t)
+twoord.plot(lx=t, ly=zc.int, rx=t, ry=vol.int, xlab="Maturité (Années)",
+            type="l", ylab="Taux zéro-coupon", rylab="Volatilité")
+axis(2, las=2)
+```
+
+Les étapes du calcul:
+
+1. Calibrage de l'arbre: généraliser la méthode de calibration vue en cours pour pouvoir construire un arbre de $n$ pas, et d'incrément $\Delta t$.
+
+2. A partir de l'article de Boyle (2000), utiliser les prix d'Arrow-Debreu pour optimiser les calculs. 
+3. Construire un arbre de maturité 5 ans, par pas de temps de 1 mois. 
+
+4. Vérifier la conformité de l'arbre en valorisant une obligation zéro coupon et une obligation à coupon fixe dans l'arbre. Vous devez reproduire exactement les prix obtenus par actualisation des flux avec les taux zéro-coupon.
+
+## Solution {-}
+
+## Calibrage {-}
+
+L'élément de base pour construire un arbre de Black-Derman-Toy est la fonction qui calcule le prix et la volatilité de taux d'une obligation zéro-coupon de maturité $n \Delta t$. 
+On suppose que les variables $\hat{r}(k), \alpha(k), k=1, \ldots, (n-1)$ sont connues.
+On note que $\hat{r}(1)$ est obtenu directement à partir de la courbe zero-coupon $z(t)$ et que $\alpha(1)=1$.
+
+
+```{r, echo=TRUE}
+PV.Y <- function(bdt.params, n, delta.t) {
+  vol = NA
+  r.hat <- bdt.params$r.hat
+  alpha <- bdt.params$alpha
+  
+  # value=1 at time n \Delta t 
+  pv <- as.vector(rep(1,n+1))
+  for(i in seq(n, 1, -1)) {
+    iExp <- seq(from=0, to=(i-1), by=1)
+    r <- r.hat[i] * exp(2*alpha[i] * iExp)
+    discount.fac <- 1/(1+r)^delta.t
+    pv <- .5 * discount.fac * pv[2:(i+1)] + .5 * discount.fac * pv[1:i]
+    if(i==2) {
+      Y.up <- (1/pv[2])^(1/((n-1)*delta.t)) - 1
+      Y.down <- (1/pv[1])^(1/((n-1)*delta.t)) - 1
+      vol <- (1/2) * log(Y.up / Y.down)
+    }
+  }
+  list(pv=pv[1], vol=vol)
+}
+```
+
+
+Définissons le système d'équations à résoudre pour un pas de temps $n$, sachant que les pas de temps précédents ont été résolus:
+
+```{r, echo=TRUE}
+obj <- function(x, n, delta.t, bdt.params) {
+  bdt.params$r.hat[n] <- x[1]
+  bdt.params$alpha[n] <- x[2]
+  tmp <- PV.Y(bdt.params, n, delta.t)
+  res <- numeric(2)
+  # z(n) is the zero-coupon yield of a bond maturing at n \Delta t
+  res[1] <- tmp$pv - df(n*delta.t)
+  res[2] <- tmp$vol - vol.curve(n*delta.t)
+  res
+  }
+```
+
+On peut maintenant calibrer l'arbre un pas de temps à la fois, en commençant par la maturité $2 \Delta t$. Ici, on construit un arbre de maturité 5 ans par pas de temps de 1 an.
+
+```{r calibration-1, echo=TRUE}
+bdt.params <- list(r.hat = numeric(5), alpha = numeric(5))
+
+bdt.params$r.hat[1] <- exp(zc.curve(1)/100) - 1
+bdt.params$alpha[1] <- 1
+
+for(n in seq(2,5)) {
+  # valeurs initiales de r.hat et alpha
+  x.0 <- as.vector(c(.02, .01))
+  sol <- nleqslv(x.0, obj, n=n, delta.t=1, bdt.params=bdt.params)
+  bdt.params$r.hat[n] <- sol$x[1]
+  bdt.params$alpha[n] <- sol$x[2]
+}
+```  
+
+Les solutions pour les trois premiers pas de temps sont représentés ci-dessous.
+
+```{r, echo=FALSE}
+r.hat <- bdt.params$r.hat
+alpha <- bdt.params$alpha
+r.1 <- round(r.hat[1],3)*100
+r.2 <- round(r.hat[2] * exp (2*alpha[2] * seq(0,1)),3)*100
+r.3 <- round(r.hat[3] * exp (2*alpha[3] * seq(0,2)),3)*100
+r.4 <- round(r.hat[4] * exp (2*alpha[4] * seq(0,3)),3)*100
+```
+
+
+\begin{tikzpicture}
+  \matrix (tree) [matrix of nodes,column sep=1.5cm]
+          {
+                  &        &         & {`r r.4[4]`} \\
+                  &        & {`r r.3[3]`}   & \\
+                  & {`r r.2[2]`} &         & {`r r.4[3]`} \\
+             {`r r.1`} &        & {`r r.3[2]`}   & \\
+                  & {`r r.2[1]`} &        & {`r r.4[2]`}     \\
+                  &       & {`r r.3[1]`} &            \\
+                  &       &        & {`r r.4[1]`}      \\
+            };
+          \draw[->] (tree-4-1)--(tree-3-2);
+          \draw[->] (tree-4-1)--(tree-5-2);
+          \draw[->] (tree-3-2)--(tree-2-3);
+          \draw[->] (tree-3-2)--(tree-4-3);
+          \draw[->] (tree-5-2)--(tree-4-3);
+          \draw[->] (tree-5-2)--(tree-6-3);
+          \draw[->] (tree-2-3)--(tree-1-4);
+          \draw[->] (tree-2-3)--(tree-3-4);
+          \draw[->] (tree-4-3)--(tree-3-4);
+          \draw[->] (tree-4-3)--(tree-5-4);
+          \draw[->] (tree-6-3)--(tree-5-4);
+          \draw[->] (tree-6-3)--(tree-7-4);
+         \end{tikzpicture}
+
+
+A titre de vérification: on valorise des obligations zero-coupon dans l'arbre, et on doit retrouver les prix calculés directement avec la courbe de taux.
+
+```{r bdt-verif-1, echo=TRUE}
+delta.t <- 1
+error <- 0
+for(n in seq(1,5)) {
+  P.ZC <- 100 * df(n*delta.t)
+  P.BDT <- 100 * PV.Y(bdt.params, n, delta.t)$pv
+  print(c(P.ZC, P.BDT))
+  error <- max(error, abs(P.ZC-P.BDT))
+}
+```
+
+L'erreur maximale est: `r error`. 
+
+## Optimisation des calculs {-}
+
+La fonction PV.Y répète inutilement des calculs d'actualisation, alors que le seul élément variable du calcul est l'actualisation du pas de temps $n+1$ vers $n$ à l'aide des variables $\hat{r}(n)$ et $\alpha(n)$. On peut grandement simplifier les calculs en calculant l'actualisation du pas de temps $2$ à $n$ avec les prix d'Arrow-Debreu associés aux états de l'étape $n$.
+
+```{r, echo=TRUE}
+PV.Y.2 <- function(bdt.params, n, delta.t, AD.up, AD.down) {
+  vol = NA
+  r.hat <- bdt.params$r.hat
+  alpha <- bdt.params$alpha
+  # value=1 at time n \Delta t 
+  pv <- as.vector(rep(1,n+1))
+  iExp <- seq(from=0, to=(n-1), by=1)
+  r <- r.hat[n] * exp(2*alpha[n] * iExp)
+  discount.fac <- 1/(1+r)^delta.t
+  pv <- .5 * discount.fac * pv[2:(n+1)] + .5 * discount.fac * pv[1:n]
+  pv.up <- sum(pv[2:n]*AD.up)
+  pv.down <- sum(pv[1:(n-1)]*AD.down)
+  Y.up <- (1/pv.up)^(1/((n-1)*delta.t)) - 1
+  Y.down <- (1/pv.down)^(1/((n-1)*delta.t)) - 1
+  vol <- (1/2) * log(Y.up / Y.down) / sqrt(delta.t)
+  pv.0 <- (1/2)*(pv.up+pv.down)/(1+r.hat[1])^delta.t
+
+  list(pv=pv.0, vol=vol)
+}
+```
+
+La fonction objectif ne change pas, mais il faut mettre à jour les prix d'Arrow-Debreu à chaque itération.
+
+```{r}
+obj.2 <- function(x, n, delta.t, bdt.params, AD.up, AD.down) {
+  bdt.params$r.hat[n] <- x[1]
+  bdt.params$alpha[n] <- x[2]
+  tmp <- PV.Y.2(bdt.params, n, delta.t, AD.up, AD.down)
+  res <- numeric(2)
+  # z(n) is the zero-coupon yield of a bond maturing at n \Delta t
+  res[1] <- tmp$pv - df(n*delta.t)
+  res[2] <- tmp$vol - vol.curve(n*delta.t)
+  res
+  }
+```
+
+Finalement, ces éléments sont regroupés dans la fonction suivante:
+
+```{r, echo=TRUE}
+BDT.tree <- function(delta.t, horizon) {
+  nb.steps <- round(horizon/delta.t)
+  bdt.params <- list(r.hat = numeric(nb.steps), alpha = numeric(nb.steps))
+  bdt.params$r.hat[1] <- exp(zc.curve(delta.t)/100) - 1
+  bdt.params$alpha[1] <- 1
+  AD.up <- 1
+  AD.down <- 1
+  for (n in seq(2, nb.steps)) {
+    x.0 <- as.vector(c(bdt.params$r.hat[n-1], bdt.params$alpha[n-1]))
+    sol <- nleqslv(x.0, obj.2, n=n, delta.t=delta.t, bdt.params=bdt.params, 
+                   AD.up=AD.up, AD.down=AD.down)
+    if(sol$termcd != 1) {
+      print(paste("nleqslv error for n:", n))
+      print(sol)
+      break
+    }
+    bdt.params$r.hat[n] <- sol$x[1]
+    bdt.params$alpha[n] <- sol$x[2]
+    tmp <- numeric(length=n)
+    iExp <- seq(0, (n-1))
+    r <- bdt.params$r.hat[n] * exp(2*bdt.params$alpha[n]*iExp)
+    # AD prices to up state
+    tmp[-1] <- (1/2)*AD.up/(1+r[-1])^delta.t
+    tmp[-n] <- tmp[-n] + (1/2) *AD.up/(1+r[-1])^delta.t
+    AD.up <- tmp
+    tmp <- numeric(length=n)
+    tmp[-1] <- (1/2)*AD.down/(1+r[-n])^delta.t
+    tmp[-n] <- tmp[-n] + (1/2)* AD.down/(1+r[-n])^delta.t
+    AD.down <- tmp
+  }
+  bdt.params
+}
+```
+
+
+## Vérification {-}
+
+On vérifie le modèle en valorisant diverses obligations dans l'arbre. Pour simplifier la mise en oeuvre, on suppose que les cash-flows tombent exactement à un incrément dans l'arbre. Pour être précis, il faudrait prendre en compte les dates exactes de paiement et interpoler les valeurs actualisées.
+
+La fonction ci-dessous valorise, dans un arbre Black-Derman-Toy, un montant $K$ payé à une date future $T = N \Delta t$. Cette fonction n'est bien sûr utile qu'à fin de vérification.
+
+```{r, echo=TRUE}
+ZC.discount <- function(bdt.params, delta.t, N, K) {
+  r.hat <- bdt.params$r.hat
+  alpha <- bdt.params$alpha
+  # noeud associé au cash-flow K
+  pv <- as.vector(rep(K,N+1))
+    
+  for(i in seq(N, 1, -1)) {
+    iExp <- seq(from=0, to=i-1, by=1)
+    r <- r.hat[i] * exp(2*alpha[i] * iExp)
+    discount.fac <- 1/(1+r)^delta.t
+    pv <- (discount.fac * pv[2:(i+1)] + discount.fac * pv[1:i])/2
+  }
+  pv
+}
+```
+
+
+```{r, echo=TRUE}
+# Facteur d'actualisation pour un paiement au pas n de l'arbre
+df.n <- function(n) {
+  df(n*delta.t)
+}
+```
+
+Calculons de deux manières le prix d'un zero-coupon de maturité 5 ans. Avec un pas de 1 mois, le paiement a lieu à l'étape 60 de l'arbre.
+
+
+```{r, echo=TRUE}
+delta.t = 1/12
+horizon = 10
+bdt.params <- BDT.tree(delta.t, horizon)
+n <- 60
+K <- 100
+PV.BDT <- ZC.discount(bdt.params, delta.t, n, K)
+PV.ZC <- 100 * df.n(n)
+```
+
+On obtient bien des prix cohérents. Le prix selon la courbe ZC est: `r round(PV.ZC,3)`, et le prix selon l'arbre BDT: `r round(PV.BDT, 3)`.
+
+Pour valoriser une obligation à coupon fixe, on modifie comme suit la fonction d'actualisation dans l'arbre:
+
+```{r, echo=TRUE}
+CF.discount <- function(bdt.params, delta.t, first_index, cf=NULL, pv=NULL) {
+  # cash flow dates start at 0
+  # BDT parameters (index) start at 1
+  r.hat <- bdt.params$r.hat
+  alpha <- bdt.params$alpha
+  # noeud associé au dernier cash-flow
+  if(is.null(pv)) {
+    nodes_at_last_step <- tail(cf$dt,1)+1
+    pv <- as.vector(rep(tail(cf$flow,1), nodes_at_last_step))
+  } else {
+    nodes_at_last_step <- length(pv)
+  }
+  last_index = nodes_at_last_step
+  cp <- 0
+  for(i_index in seq(last_index-1, first_index, -1)) {
+    iExp <- seq(from=0, to=(i_index-1), by=1)
+    r <- r.hat[i_index] * exp(2*alpha[i_index] * iExp)
+    discount.fac <- 1/(1+r)^delta.t
+    pv <- (discount.fac * pv[2:(i_index+1)] + discount.fac * pv[1:i_index])/2
+    # on ajoute la valeur du coupon payé à cette date, sauf à la date d'actualisation. 
+    idx <- which((cf$dt+1) == i_index)
+    if(length(idx) == 1) {
+      if(i_index > first_index) {
+        pv <- pv + cf$flow[idx]
+      }  else {
+        cp <- cf$flow[idx]
+      }
+    }
+  }
+  list(pv=pv, cp=cp)
+}
+```
+
+Fonction pour construire l'échéancier d'un obligation.
+
+```{r, echo=TRUE}
+bond.cf <- function(maturity, coupon) {
+  cf <- list(dt= 12*seq(maturity), flow=rep(coupon, maturity))
+  cf$flow[maturity] <- cf$flow[maturity] + 100
+  cf
+}
+```
+
+Valorisation d'une obligation de maturité 5 ans et coupon de 3%:
+on calcule le prix à l'aide de l'arbre et aussi directement avec les taux zéro-coupon.
+
+```{r, echo=TRUE}
+cf <- bond.cf(3, 5)
+disc.factor <- unlist(lapply(cf$dt, df.n))
+PV.ZC <- sum(cf$flow*disc.factor)
+PV.BDT <- CF.discount(bdt.params, delta.t, 1, cf=cf)
+```
+
+On obtient bien des prix cohérents. Le prix selon la courbe ZC est: `r round(PV.ZC,3)`, et le prix selon l'arbre BDT: `r round(PV.BDT$pv, 3)`.
+
+# Options sur obligations
+
+## Option sur un zero-coupon
+
+Calculer le prix d'une option d'achat de maturité 1 an, de strike 91, sur une obligation zéro-coupon de maturité 5 ans.
+
+## Solution {-}
+
+A maturité de l'option, le zéro-coupon a une maturité résiduelle 4 ans.
+On calcule la valeur à terme en $T_1 = 12 \times \Delta t$ de l'obligation zéro-coupon.
+
+```{r, echo=TRUE}
+n = 12
+FV <- CF.discount(bdt.params, delta.t, n+1, pv=rep(100, 61))
+Strike <- 91
+ex <- pmax(FV$pv-Strike, 0)
+pv <- CF.discount(bdt.params, delta.t, first_index=1, pv=ex)
+```
+
+On obtient un prix de `r round(pv$pv,2)`. On peut obtenir le même résultat en calculant l'espérance de valeur d'exercice, actualisée à la date de calcul:
+
+```{r, echo=TRUE}
+prob <- dbinom(seq(0,12), 12, 1/2)
+pv <- sum(ex*prob)*df(1)
+```
+
+Ce qui donne comme prévu la valeur pv = `r round(pv,2)`.
+
+
+## Options sur obligation
+
+On considère maintenant une obligation de maturité 9 ans versant un coupon annuel de 3%, et une option d'achat de strike 100 et de maturité 1 an sur cette obligation.
+
+## Solution {-}
+
+On calcule la valeur à terme en $T_1 = 12 \times \Delta t$ de l'obligation. 
+
+```{r, echo=TRUE}
+cf <- bond.cf(9, 3)
+# tranche de temps 13 = 12 mois.
+FV <- CF.discount(bdt.params, delta.t, first_index=13, cf=cf) 
+
+Strike <- 100
+# valeur d'exercice à maturité
+ex <- pmax(FV$pv-Strike, 0)
+pv <- CF.discount(bdt.params, delta.t, first_index=1, pv=ex)
+```
+
+Pour un strike de 100, l'option d'achat vaut `r round(pv$pv,2)`.
+
+## Obligation avec option de remboursement anticipé
+
+Les obligations avec option de remboursement anticipé ("callable bonds") sont émises de façon régulière. Elles donnent l'opportunité, pour l'émetteur, de pouvoir se refinancer à meilleur compte en cas de baisse des taux.
+
+On considère une obligation de maturité 10 ans, remboursable au pair à la date aniversaire de l'émission, c'est à dire une fois par an, et ce à partir du 5ème aniversaire. Il y aura donc 5 opportunité de remboursement anticipé.
+
+On se propose de valoriser une telle obligation dans le modèle de Black-Derman-Toy afin de mesurer la valeur de cette option de remboursement anticipé.
+
+Pour ce faire, on va calculer la valeur actualisée de l'obligation par récursion inverse dans l'arbre.
+A chaque date anniversaire où l'option de remboursement peut être exercée, on devra comparer la valeur actualisée de l'obligation à la valeur de remboursement immédiat, et effectuer le choix optimal du point de vue de l'émetteur.
+
+Les détails de l'obligation sont les suivants:
+
+- date de maturité: 23 février 2035
+
+- coupon annuel: 3%
+
+Les obligations sont en grande majorité émises au pair. Quel doit être le taux de coupon pour que ces obligations (avec ou sans clause de remboursement anticipé) puissent être émises au pair?
+
+## Solution {-}
+
+On construit l'échéancier de l'obligation
+
+```{r, echo=TRUE}
+maturity <- 10
+coupon <- 3
+K <- 100
+cf <- bond.cf(maturity, coupon)
+```
+
+Construction d'un arbre de maturité 10 ans et actualisation: a chaque date anniversaire, on calcule l'exercice optimal, et on ajoute le coupon à la valeur liquidative. 
+
+```{r, echo=TRUE}
+bdt.params <- BDT.tree(delta.t, maturity)
+pv <- NULL
+for(i in seq(9,5)) {
+    Val <- CF.discount(bdt.params, delta.t, first_index=i*12+1, cf=cf, pv=pv)
+    pv <- pmin(Val$pv, 100)
+    pv <- pv + Val$cp
+}
+```
+
+Finalement on actualise de la 5ème année jusqu'à la date du jour.
+
+```{r, echo=TRUE}
+Val <- CF.discount(bdt.params, delta.t, first_index= 1, cf=cf, pv=pv)
+```
+
+Ce qui donne un prix de `r round(Val$pv,2)`. A titre de comparaison, calculons la valeur de l'obligation sans clauses de remboursement anticipé:
+
+```{r, echo=TRUE}
+disc.factor <- unlist(lapply(cf$dt, df.n))
+PV.ZC <- sum(cf$flow*disc.factor)
+```
+
+Sans l'option de remboursement anticipé, cette même obligation vaudrait `r round(PV.ZC, 3)`.
+
+Pour déterminer le coupon qui permettrait d’émettre au pair, on résout pour $c$ l'équation $PV(c) = 100$. Avec $c$ le taux de coupon et $P(c)$ la valeur de l'obligation à l'émission.
+
+```{r, echo=TRUE}
+f <- function(coupon) {
+  cf <- bond.cf(maturity, coupon)
+  pv <- NULL
+  for(i in seq(9,5)) {
+    Val <- CF.discount(bdt.params, delta.t, first_index=i*12+1, cf=cf, pv=pv)
+    pv <- pmin(Val$pv, 100)
+    pv <- pv + Val$cp
+  }
+  Val <- CF.discount(bdt.params, delta.t, first_index= 1, cf=cf, pv=pv)
+  Val$pv - 100  
+}
+
+sol <- uniroot(f, c(1, 4))
+```
+
+Ce qui donne un coupon de `r round(sol$root,2)` % pour l'obligation remboursable par anticipation. 
+Le même calcul pour l' obligation simple donne:
+
+```{r, echo=TRUE}
+f <- function(coupon) {
+  cf <- bond.cf(maturity, coupon)
+  disc.factor <- unlist(lapply(cf$dt, df.n))
+  100 - sum(cf$flow*disc.factor)
+}
+
+sol <- uniroot(f, c(1,4))
+```
+
+Ce qui donne un coupon de `r round(sol$root,2)` % pour l'obligation simple.
+
+
+
+
+
+

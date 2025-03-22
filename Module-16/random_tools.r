@@ -27,7 +27,7 @@ rnormInnovations <- function(nbPaths, pathLength) {
      # Return Value:
      innovations }
 
-logNormal <- function(S0, eps, delta.t, mu, sigma) {
+logNormal <- function(S0, eps, delta.t, params) {
 # Log-normal path generator
 
 #' Log-normal dynamic with constant drift and volatility
